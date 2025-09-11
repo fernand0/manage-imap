@@ -85,6 +85,7 @@ class EmailManager:
             "Move mail",
             "Rules Management...",
             "Change current folder",
+            "Exit (ask to save rules)",
             "Exit"
         ]
         return self._display_menu_and_get_choice("MAIN MENU", menu_options)
@@ -367,12 +368,15 @@ def main():
                 manager.move_message(create_rule=False)
             elif choice == 2: # Rules Management
                 manager._rules_submenu()
-            elif choice == 3: # Change folder
+            elif choice == 3: # Change current folder
                 manager.change_folder()
-            elif choice == 4: # Exit
+            elif choice == 4: # Exit (ask to save rules)
                 if input("Save rules before quitting? (y/n): ").lower() == 'y':
                     manager.rule_manager.save_rules()
                 print("Exiting.")
+                break
+            elif choice == 5: # Exit (discard changes)
+                print("Exiting without saving changes.")
                 break
             
             input("\nPress Enter to continue...")
