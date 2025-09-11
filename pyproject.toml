@@ -11,3 +11,6 @@ dependencies = [
     "click",
     "social-modules @ git+https://github.com/fernand0/socialModules.git",
 ]
+
+[tool.setuptools]
+py-modules = ["manage_imap"]
