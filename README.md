@@ -2,10 +2,6 @@
 
 A command-line tool to manage and organize IMAP mailboxes using a powerful rule-based system. This project is a complete refactoring of an older legacy script into a more robust and maintainable object-oriented application.
 
-## ⚠️ Disclaimer
-
-**This code was migrated from a legacy program. While the main functionality has been refactored, the underlying logic for the rules engine has not been formally tested and should be used with caution.**
-
 ## Installation
 
 This project uses a virtual environment to manage dependencies.
@@ -37,3 +33,7 @@ python manage_imap.py
 ```
 
 You will be presented with a menu to manage your emails and rules.
+
+## ⚠️ Disclaimer
+
+**This code was migrated from a legacy program. While the main functionality has been refactored, the underlying logic for the rules engine has not been formally tested and should be used with caution.**
