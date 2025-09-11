@@ -1,0 +1,13 @@
+[project]
+name = "manage-imap"
+version = "0.1.0"
+description = "A tool to manage IMAP mailboxes."
+authors = [
+    {name = "fernand0"},
+]
+dependencies = [
+    "google-api-python-client",
+    "oauth2client",
+    "click",
+    "social-modules @ git+https://github.com/fernand0/socialModules.git",
+]
