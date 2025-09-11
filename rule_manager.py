@@ -14,17 +14,20 @@ class EmailRuleManager:
     
     def _load_rules(self) -> Dict[str, List[Tuple]]:
         """Load rules from pickle file."""
+        loaded_rules = {'always': [], 'sometimes': []} # Default value
         try:
             with open(self.rules_file, 'rb') as f:
-                return pickle.load(f)
+                loaded_rules = pickle.load(f) # Assign to variable
         except (FileNotFoundError, pickle.PickleError) as e:
             logging.warning(f"Could not load rules: {e}")
-            return {'always': [], 'sometimes': []}
+            # loaded_rules remains the default empty dict
+        
+        return loaded_rules # Single exit point
     
     def save_rules(self) -> None:
         """Save rules to pickle file."""
         try:
-            with open(self.self.rules_file, 'wb') as f:
+            with open(self.rules_file, 'wb') as f:
                 pickle.dump(self.rules, f)
             logging.info("Rules saved successfully")
         except Exception as e:
