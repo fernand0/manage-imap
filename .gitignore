@@ -5,6 +5,7 @@ venv/
 # IDE / Editor specific
 .vscode/
 .idea/
+*.swp
 
 # Python cache
 __pycache__/
