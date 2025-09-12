@@ -60,14 +60,19 @@ class EmailManager:
             for i, option in enumerate(menu_options):
                 print(f"{i}: {option}")
 
+            choice = input("\nSelect option: ").strip()
+
+            # Allow 'q' to exit from the main menu, corresponding to option 6
+            if menu_title == "MAIN MENU" and choice.lower() == "q":
+                return 6
+
             try:
-                choice = input("\nSelect option: ").strip()
                 option = int(choice)
 
                 if 0 <= option < len(menu_options):
                     return option
                 else:
-                    print(f"Please enter a number between 0 and {len(menu_options)-1}")
+                    print(f"Please enter a number between 0 and {len(menu_options) - 1}")
 
             except ValueError:
                 print("Please enter a valid number")
@@ -79,6 +84,7 @@ class EmailManager:
             "Move mail",
             "Rules Management...",
             "Change current folder",
+            "List unread messages",
             "Exit (ask to save rules)",
             "Exit",
         ]
@@ -375,6 +381,43 @@ class EmailManager:
         else:
             logging.error("Failed to remove the rule from its original category.")
 
+    def list_unread_messages(self) -> None:
+        """Lists unread messages in the current folder and offers to mark them as read."""
+        try:
+            self.api_src.setPosts()
+            current_folder = self.api_src.getChannel()
+            logging.info(f"Searching for unread messages in '{current_folder}'...")
+
+            self.api_src.setChannel(current_folder)  # Ensure correct folder is selected
+            
+            # Standard IMAP search criteria for unread (unseen) messages
+            status, msg_ids = self.api_src.getClient().search(None, '(UNSEEN)')
+
+            if status != 'OK' or not msg_ids[0]:
+                print("No unread messages found in this folder.")
+                return
+
+            unread_msg_ids = msg_ids[0].decode('utf-8').split()
+            print(f"Found {len(unread_msg_ids)} unread messages.")
+
+            # Fetch headers for display
+            for msg_id in unread_msg_ids:
+                stat, data = self.api_src.getClient().fetch(msg_id, '(BODY[HEADER.FIELDS (FROM SUBJECT DATE)])')
+                if stat == 'OK':
+                    header = data[0][1].decode('utf-8')
+                    # Simple formatting for display
+                    header_lines = [line for line in header.split('\r\n') if line]
+                    print(f"- ID: {msg_id}, " + ", ".join(header_lines))
+
+            # Ask user if they want to mark them as read
+            if input("\nMark these messages as read? (y/n): ").lower() == 'y':
+                for msg_id in unread_msg_ids:
+                    self.api_src.getClient().store(msg_id, '+FLAGS', '\\Seen')
+                print(f"{len(unread_msg_ids)} message(s) marked as read.")
+
+        except Exception as e:
+            logging.error(f"Failed to list or update unread messages: {e}", exc_info=True)
+
     def purge_deleted_mails(self) -> None:
         """Permanently delete emails marked for deletion in the current folder."""
         current_folder = self.api_src.getChannel()
@@ -420,12 +463,14 @@ def main():
                 manager._rules_submenu()
             elif choice == 3:  # Change current folder
                 manager.change_folder()
-            elif choice == 4:  # Exit (ask to save rules)
+            elif choice == 4:  # List unread messages
+                manager.list_unread_messages()
+            elif choice == 5:  # Exit (ask to save rules)
                 if input("Save rules before quitting? (y/n): ").lower() == "y":
                     manager.rule_manager.save_rules()
                 print("Exiting.")
                 break
-            elif choice == 5:  # Exit (discard changes)
+            elif choice == 6:  # Exit (discard changes)
                 print("Exiting without saving changes.")
                 break
 
