@@ -82,9 +82,9 @@ class EmailManager:
         menu_options = [
             "Purge deleted mails",
             "Move mail",
-            "Rules Management...",
             "Change current folder",
             "List unread messages",
+            "Rules Management...",
             "Exit (ask to save rules)",
             "Exit",
         ]
@@ -459,12 +459,12 @@ def main():
                 manager.purge_deleted_mails()
             elif choice == 1:  # Move mail
                 manager.move_message(create_rule=False)
-            elif choice == 2:  # Rules Management
-                manager._rules_submenu()
-            elif choice == 3:  # Change current folder
+            elif choice == 2:  # Change current folder
                 manager.change_folder()
-            elif choice == 4:  # List unread messages
+            elif choice == 3:  # List unread messages
                 manager.list_unread_messages()
+            elif choice == 4:  # Rules Management
+                manager._rules_submenu()
             elif choice == 5:  # Exit (ask to save rules)
                 if input("Save rules before quitting? (y/n): ").lower() == "y":
                     manager.rule_manager.save_rules()
