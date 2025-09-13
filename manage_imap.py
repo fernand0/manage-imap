@@ -231,7 +231,7 @@ class EmailManager:
         )
 
         try:
-            self.api_src.setChannel("INBOX")
+            #self.api_src.setChannel("INBOX")
             self.api_src.setPosts()
             _, msg_ids = self.api_src.getClient().search(None, search_criteria)
         except Exception:
