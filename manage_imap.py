@@ -48,6 +48,19 @@ class EmailManager:
             logging.error(f"Failed to initialize: {e}")
             raise
 
+    def reconnect(self) -> None:
+        """Re-establish the IMAP session."""
+        logging.info("Re-establishing IMAP session...")
+        try:
+            import socialModules.moduleRules
+
+            rules = socialModules.moduleRules.moduleRules()
+            rules.checkRules()
+            self.api_src = rules.selectRuleInteractive("imap")
+            logging.info("IMAP session re-established successfully.")
+        except Exception as e:
+            logging.error(f"Failed to re-establish session: {e}")
+
     def _display_menu_and_get_choice(
         self, menu_title: str, menu_options: List[str]
     ) -> int:
@@ -62,9 +75,9 @@ class EmailManager:
 
             choice = input("\nSelect option: ").strip()
 
-            # Allow 'q' to exit from the main menu, corresponding to option 6
+            # Allow 'q' to exit from the main menu, corresponding to option 7
             if menu_title == "MAIN MENU" and choice.lower() == "q":
-                return 6
+                return 7
 
             try:
                 option = int(choice)
@@ -85,6 +98,7 @@ class EmailManager:
             "Change current folder",
             "List unread messages",
             "Rules Management...",
+            "Reconnect",
             "Exit (ask to save rules)",
             "Exit",
         ]
@@ -465,12 +479,14 @@ def main():
                 manager.list_unread_messages()
             elif choice == 4:  # Rules Management
                 manager._rules_submenu()
-            elif choice == 5:  # Exit (ask to save rules)
+            elif choice == 5:  # Reconnect
+                manager.reconnect()
+            elif choice == 6:  # Exit (ask to save rules)
                 if input("Save rules before quitting? (y/n): ").lower() == "y":
                     manager.rule_manager.save_rules()
                 print("Exiting.")
                 break
-            elif choice == 6:  # Exit (discard changes)
+            elif choice == 7:  # Exit (discard changes)
                 print("Exiting without saving changes.")
                 break
 
