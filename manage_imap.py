@@ -155,7 +155,8 @@ class EmailManager:
                 # selected_msg remains None, and the function will return it.
             else:
                 print("\nRecent messages:")
-                for i, msg in enumerate(posts[-15:]):
+                numPosts = min(15,len(posts))
+                for i, msg in enumerate(posts[-numPosts:]):
                     from_addr = self.api_src.getPostFrom(msg)
                     subject = self.api_src.getPostTitle(msg)
                     print(f"{i}: {from_addr} - {subject}")
@@ -173,9 +174,9 @@ class EmailManager:
                             break
 
                         msg_num = int(choice)
-                        if 0 <= msg_num < len(posts[-15:]):
+                        if 0 <= msg_num < numPosts:
                             selected_msg = posts[
-                                -(15 - msg_num)
+                                -numPosts + msg_num
                             ]  # Assign to variable, loop will terminate
                         else:
                             print("Invalid message number.")
@@ -202,11 +203,12 @@ class EmailManager:
             logging.info(f"Rule based on: Header='{keyword}', Content='{textHeader}'")
 
             textHeaderS = textHeader
-            if "Subject" not in keyword and "@" in textHeader:
-                domain = textHeader.split("@")[1]
-                textHeaderS = next(
-                    (part for part in domain.split(".") if part != "www"), textHeaderS
-                )
+            if textHeader:
+                if "Subject" not in keyword and "@" in textHeader:
+                    domain = textHeader.split("@")[1]
+                    textHeaderS = next(
+                        (part for part in domain.split(".") if part != "www"), textHeaderS
+                    )
 
             folder = self.api_src.selectFolderN(
                 self.api_src.getClient(), folderM=textHeaderS
@@ -226,7 +228,6 @@ class EmailManager:
                     self.rule_manager.add_rule(new_rule, "sometimes")
                 else:
                     print("Invalid rule type. Rule not saved.")
-
         except Exception as e:
             logging.error(f"An error occurred while moving message: {e}", exc_info=True)
 
@@ -266,8 +267,8 @@ class EmailManager:
                 print("Move operation cancelled.")
                 return
 
-        result = self.api_src.moveMails(self.api_src.getClient(), msg_list_str, folder)
-        print(f"Move result: {result}")
+            result = self.api_src.moveMails(self.api_src.getClient(), msg_list_str, folder)
+            print(f"Move result: {result}")
 
     def _select_rule(self) -> Optional[Tuple]:
         """Interactively select a rule from the list."""
@@ -472,6 +473,8 @@ def main():
             if choice == 0:  # Purge deleted mails
                 manager.purge_deleted_mails()
             elif choice == 1:  # Move mail
+                #logging.info(f"Status: {manager.api_src.getClient().state}")
+                #logging.info(f"Recent: {manager.api_src.getClient().recent()}")
                 manager.move_message(create_rule=False)
             elif choice == 2:  # Change current folder
                 manager.change_folder()
@@ -490,11 +493,11 @@ def main():
                 print("Exiting without saving changes.")
                 break
 
-            input("\nPress Enter to continue...")
+        input("\nPress Enter to continue...")
 
     except Exception as e:
         logging.error(f"Application failed to start: {e}", exc_info=True)
-        sys.exit(1)
+    sys.exit(1)
 
 
 if __name__ == "__main__":
