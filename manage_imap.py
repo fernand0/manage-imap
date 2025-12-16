@@ -191,7 +191,9 @@ class EmailManager:
         return selected_msg  # Single exit point
 
     def move_message(self, create_rule: bool = False) -> None:
-        """Selects a message, moves it to a folder, and optionally creates a rule."""
+        """
+        Selects a message, moves it to a folder, and optionally creates a rule.
+        """
         try:
             msg = self.select_message()
             if not msg:
@@ -260,10 +262,11 @@ class EmailManager:
 
         msg_list_str = msg_ids[0].decode("utf-8").replace(" ", ",")
         msg_count = len(msg_list_str.split(","))
-        print(f"Found {msg_count} messages matching the rule.")
+        print(f"Found {msg_count} messages matching the rule. ")
 
         if interactive:
-            if input("Proceed with moving messages? (y/n): ").lower() != "y":
+            msgInput = f"Proceed with moving messages to '{folder}'? (y/n): " 
+            if input(msgInput).lower() != "y":
                 print("Move operation cancelled.")
                 return
 
