@@ -12,6 +12,10 @@ import sys
 from enum import IntEnum
 from typing import List, Tuple, Optional, Any
 
+# Constants
+MENU_SEPARATOR_WIDTH = 50
+RECENT_MESSAGES_LIMIT = 15
+
 # Configure logging at module level
 logging.basicConfig(
     stream=sys.stdout,
@@ -92,9 +96,9 @@ class EmailManager:
     ) -> int:
         """Generic helper to display a menu and get a valid choice."""
         while True:
-            print("\n" + "=" * 50)
+            print("\n" + "=" * MENU_SEPARATOR_WIDTH)
             print(menu_title)
-            print("=" * 50)
+            print("=" * MENU_SEPARATOR_WIDTH)
 
             for i, option in enumerate(menu_options):
                 print(f"{i}: {option}")
@@ -180,7 +184,7 @@ class EmailManager:
                 )
             else:
                 print("\nRecent messages:")
-                for i, msg in enumerate(posts[-15:]):
+                for i, msg in enumerate(posts[-RECENT_MESSAGES_LIMIT:]):
                     from_addr = self.api_src.getPostFrom(msg)
                     subject = self.api_src.getPostTitle(msg)
                     print(f"{i}: {from_addr} - {subject}")
@@ -194,8 +198,8 @@ class EmailManager:
                             break
 
                         msg_num = int(choice)
-                        if 0 <= msg_num < len(posts[-15:]):
-                            selected_msg = posts[-(15 - msg_num)]
+                        if 0 <= msg_num < len(posts[-RECENT_MESSAGES_LIMIT:]):
+                            selected_msg = posts[-(RECENT_MESSAGES_LIMIT - msg_num)]
                         else:
                             print("Invalid message number.")
 
