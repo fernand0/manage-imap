@@ -1,13 +1,12 @@
 """
 Module for managing email organization rules.
 
-Supports both legacy pickle format and new JSON format with automatic migration.
+Rules are stored in JSON format for safety and portability.
 """
 
 import json
 import logging
 import os
-import shutil
 from dataclasses import dataclass, asdict
 from typing import Dict, List, Optional, Any
 
@@ -21,11 +20,11 @@ class EmailRule:
 
     @classmethod
     def from_tuple(cls, rule_tuple: tuple) -> "EmailRule":
-        """Create an EmailRule from a legacy tuple format."""
+        """Create an EmailRule from a tuple format."""
         return cls(keyword=rule_tuple[0], pattern=rule_tuple[1], folder=rule_tuple[2])
 
     def to_tuple(self) -> tuple:
-        """Convert to legacy tuple format for compatibility."""
+        """Convert to tuple format for compatibility."""
         return (self.keyword, self.pattern, self.folder)
 
     def matches(self, header_value: str) -> bool:
@@ -38,31 +37,29 @@ class EmailRuleManager:
 
     RULES_VERSION = "1.0"
 
-    def __init__(self, rules_file: str, create_backup: bool = True):
+    def __init__(self, rules_file: str):
         self.rules_file = rules_file
-        self.create_backup = create_backup
         self.rules: Dict[str, List[EmailRule]] = {"always": [], "sometimes": []}
         self._load_rules()
 
     def _load_rules(self) -> None:
-        """Load rules from file (JSON or pickle with auto-migration)."""
+        """Load rules from JSON file."""
         if not os.path.exists(self.rules_file):
             logging.info(f"No rules file found at {self.rules_file}, starting with empty rules")
             return
 
-        # Try JSON first (new format)
         try:
             with open(self.rules_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
+                content = f.read()
+                if not content.strip():
+                    # Empty file, start with default rules
+                    return
+                data = json.loads(content)
                 self._parse_json_rules(data)
                 logging.info("Loaded rules from JSON file")
-                return
         except (json.JSONDecodeError, UnicodeDecodeError, KeyError) as e:
-            logging.debug(f"Not a valid JSON rules file: {e}, trying pickle format")
-            pass  # Not valid JSON, try pickle
-
-        # Fall back to pickle (legacy format)
-        self._load_pickle_rules()
+            logging.error(f"Failed to load rules: {e}")
+            raise
 
     def _parse_json_rules(self, data: Dict[str, Any]) -> None:
         """Parse JSON format rules into EmailRule objects."""
@@ -79,41 +76,9 @@ class EmailRuleManager:
                         )
                         self.rules[category].append(rule)
                     elif isinstance(rule_data, (tuple, list)):
-                        # Handle case where JSON has arrays from previous migration
+                        # Handle tuple/list format for backward compatibility
                         rule = EmailRule.from_tuple(tuple(rule_data))
                         self.rules[category].append(rule)
-
-    def _load_pickle_rules(self) -> None:
-        """Load rules from legacy pickle format and migrate to JSON."""
-        import pickle  # Only import pickle for legacy migration
-
-        try:
-            with open(self.rules_file, "rb") as f:
-                loaded_rules = pickle.load(f)
-            
-            logging.warning("Loaded rules from legacy pickle format")
-            
-            # Create backup before migration
-            if self.create_backup:
-                backup_path = f"{self.rules_file}.bak"
-                shutil.copy2(self.rules_file, backup_path)
-                logging.info(f"Created backup of legacy rules at {backup_path}")
-            
-            # Convert tuple-based rules to EmailRule objects
-            self.rules = {"always": [], "sometimes": []}
-            for category in ["always", "sometimes"]:
-                if category in loaded_rules:
-                    for rule_tuple in loaded_rules[category]:
-                        if isinstance(rule_tuple, (tuple, list)):
-                            rule = EmailRule.from_tuple(tuple(rule_tuple))
-                            self.rules[category].append(rule)
-            
-            # Save as JSON
-            self.save_rules()
-            logging.info("Rules auto-migrated to JSON format")
-            
-        except (FileNotFoundError, pickle.PickleError, EOFError) as e:
-            logging.warning(f"Could not load rules from pickle: {e}")
 
     def save_rules(self) -> None:
         """Save rules to JSON file."""

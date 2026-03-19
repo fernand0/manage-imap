@@ -4,10 +4,8 @@ Tests for the EmailRuleManager class.
 
 import json
 import os
-import pickle
 import tempfile
 import pytest
-from pathlib import Path
 
 from rule_manager import EmailRuleManager, EmailRule
 
@@ -23,7 +21,7 @@ class TestEmailRule:
         assert rule.folder == "Inbox"
 
     def test_from_tuple(self):
-        """Test creating a rule from a legacy tuple format."""
+        """Test creating a rule from a tuple format."""
         rule_tuple = ("From", "notifications@github.com", "GitHub")
         rule = EmailRule.from_tuple(rule_tuple)
         assert rule.keyword == "From"
@@ -71,19 +69,15 @@ class TestEmailRuleManager:
         # Cleanup
         if os.path.exists(temp_path):
             os.unlink(temp_path)
-        # Also cleanup backup if exists
-        backup_path = f"{temp_path}.bak"
-        if os.path.exists(backup_path):
-            os.unlink(backup_path)
 
     @pytest.fixture
     def rule_manager(self, temp_rules_file):
         """Create a rule manager instance with a temporary file."""
-        return EmailRuleManager(temp_rules_file, create_backup=False)
+        return EmailRuleManager(temp_rules_file)
 
     def test_init_empty_file(self, temp_rules_file):
         """Test initialization with non-existent file."""
-        manager = EmailRuleManager(temp_rules_file, create_backup=False)
+        manager = EmailRuleManager(temp_rules_file)
         assert manager.rules == {"always": [], "sometimes": []}
 
     def test_add_rule(self, rule_manager):
@@ -123,12 +117,12 @@ class TestEmailRuleManager:
         """Test removing a rule that doesn't exist."""
         rule = EmailRule(keyword="From", pattern="test@test.com", folder="Inbox")
         
-        result = rule_manager.remove_rule(rule, "always")
+        result = rule_manager.remove_rule(rule, "default")
         assert result is False
 
     def test_save_and_load_rules(self, temp_rules_file):
         """Test saving and loading rules."""
-        manager = EmailRuleManager(temp_rules_file, create_backup=False)
+        manager = EmailRuleManager(temp_rules_file)
         
         # Add some rules
         manager.add_rule(EmailRule("From", "test@test.com", "Inbox"), "always")
@@ -161,46 +155,19 @@ class TestEmailRuleManager:
         with open(temp_rules_file, 'w') as f:
             json.dump(data, f)
         
-        manager = EmailRuleManager(temp_rules_file, create_backup=False)
+        manager = EmailRuleManager(temp_rules_file)
         
         assert len(manager.rules["always"]) == 1
         assert len(manager.rules["sometimes"]) == 1
         assert manager.rules["always"][0].pattern == "test@test.com"
 
-    def test_migrate_pickle_rules(self):
-        """Test migration from legacy pickle format."""
-        # Create a pickle file with legacy format
-        with tempfile.NamedTemporaryFile(mode='wb', suffix='.dat', delete=False) as f:
-            temp_path = f.name
-            pickle_data = {
-                "always": [("From", "test@test.com", "Inbox")],
-                "sometimes": [("Subject", "Sale", "Promotions")]
-            }
-            pickle.dump(pickle_data, f)
+    def test_invalid_json_raises_error(self, temp_rules_file):
+        """Test that invalid JSON raises an error."""
+        with open(temp_rules_file, 'w') as f:
+            f.write("This is not valid JSON")
         
-        try:
-            # Create manager which should auto-migrate
-            manager = EmailRuleManager(temp_path, create_backup=True)
-            
-            # Verify rules were migrated
-            assert len(manager.rules["always"]) == 1
-            assert len(manager.rules["sometimes"]) == 1
-            assert manager.rules["always"][0].keyword == "From"
-            
-            # Verify backup was created
-            backup_path = f"{temp_path}.bak"
-            assert os.path.exists(backup_path)
-            
-            # Verify file is now JSON
-            with open(temp_path, 'r') as f:
-                data = json.load(f)
-            assert "version" in data
-            
-        finally:
-            # Cleanup
-            for path in [temp_path, f"{temp_path}.bak"]:
-                if os.path.exists(path):
-                    os.unlink(path)
+        with pytest.raises((json.JSONDecodeError, ValueError)):
+            EmailRuleManager(temp_rules_file)
 
     def test_get_rules(self, rule_manager):
         """Test getting rules with optional filter."""
@@ -267,35 +234,3 @@ class TestEmailRuleManager:
         captured = capsys.readouterr()
         assert "ALWAYS Rules:" in captured.out
         assert "test@test.com" in captured.out
-
-
-class TestMigration:
-    """Tests for legacy format migration."""
-
-    def test_invalid_json_falls_back_to_pickle(self):
-        """Test that invalid JSON falls back to pickle format."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            temp_path = f.name
-            f.write("This is not valid JSON")
-        
-        try:
-            # Should not raise, but log a warning
-            manager = EmailRuleManager(temp_path, create_backup=False)
-            # Should have empty rules since neither format was valid
-            assert manager.rules == {"always": [], "sometimes": []}
-        finally:
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
-
-    def test_malformed_pickle_handled_gracefully(self):
-        """Test that malformed pickle files are handled gracefully."""
-        with tempfile.NamedTemporaryFile(mode='wb', suffix='.dat', delete=False) as f:
-            temp_path = f.name
-            f.write(b"This is not a valid pickle")
-        
-        try:
-            manager = EmailRuleManager(temp_path, create_backup=False)
-            assert manager.rules == {"always": [], "sometimes": []}
-        finally:
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)

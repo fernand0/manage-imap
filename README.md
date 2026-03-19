@@ -45,9 +45,6 @@ You will be presented with a menu to manage your emails and rules.
 ```bash
 # Run with custom rules file
 python manage_imap.py --rules-file /path/to/rules.json
-
-# Migrate legacy pickle rules to JSON format
-python manage_imap.py --migrate-only
 ```
 
 ## Features
@@ -90,17 +87,6 @@ Rules are stored in JSON format with the following structure:
 - **always**: Rules that are applied automatically without confirmation
 - **sometimes**: Rules that require confirmation before applying
 
-### Legacy Format Migration
-
-If you have existing rules in the legacy pickle format (`.dat` file), the application will automatically:
-
-1. Detect the legacy format
-2. Create a backup (`.bak` file)
-3. Migrate to the new JSON format
-4. Save the migrated rules
-
-You can also migrate manually using the `--migrate-only` flag.
-
 ## Testing
 
 Run the test suite with:
@@ -111,4 +97,4 @@ pytest tests/ -v
 
 ## ⚠️ Disclaimer
 
-**This code was migrated from a legacy program. While the main functionality has been refactored and tested, always backup your rules before migration and test thoroughly in your environment.**
+**Always backup your rules file before making changes. Test thoroughly in your environment before using on production mailboxes.**

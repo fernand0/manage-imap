@@ -8,7 +8,6 @@ organization and automated folder management.
 
 import argparse
 import logging
-import os
 import sys
 from typing import List, Tuple, Optional, Any
 
@@ -461,28 +460,9 @@ def main():
         default=None,
         help="Path to rules file (default: from DATADIR)",
     )
-    parser.add_argument(
-        "--migrate-only",
-        action="store_true",
-        help="Migrate legacy pickle rules to JSON format and exit",
-    )
     args = parser.parse_args()
 
     rules_file = args.rules_file or f"{DATADIR}/rulesSieve.dat"
-
-    # Handle migrate-only mode
-    if args.migrate_only:
-        print(f"Migrating rules from: {rules_file}")
-        try:
-            rule_manager = EmailRuleManager(rules_file, create_backup=True)
-            print("Migration completed successfully!")
-            print(f"Rules are now stored in JSON format at: {rules_file}")
-            if os.path.exists(f"{rules_file}.bak"):
-                print(f"Backup created at: {rules_file}.bak")
-        except Exception as e:
-            print(f"Migration failed: {e}")
-            sys.exit(1)
-        return
 
     manager = EmailManager(rules_file=rules_file)
     try:
