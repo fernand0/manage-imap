@@ -9,7 +9,32 @@ organization and automated folder management.
 import argparse
 import logging
 import sys
+from enum import IntEnum
 from typing import List, Tuple, Optional, Any
+
+
+class MainMenu(IntEnum):
+    """Main menu options."""
+    PURGE_DELETED = 0
+    MOVE_MAIL = 1
+    CHANGE_FOLDER = 2
+    LIST_UNREAD = 3
+    RULES_MANAGEMENT = 4
+    RECONNECT = 5
+    EXIT_SAVE = 6
+    EXIT_DISCARD = 7
+
+
+class RulesMenu(IntEnum):
+    """Rules management submenu options."""
+    SHOW_RULES = 0
+    CREATE_RULE = 1
+    APPLY_ONE_RULE = 2
+    APPLY_ALL_RULES = 3
+    ORGANIZE_RULES = 4
+    SAVE_RULES = 5
+    RELOAD_RULES = 6
+    BACK_TO_MAIN = 7
 
 
 # Local imports
@@ -76,9 +101,9 @@ class EmailManager:
 
             choice = input("\nSelect option: ").strip()
 
-            # Allow 'q' to exit from the main menu, corresponding to option 7
+            # Allow 'q' to exit from the main menu
             if menu_title == "MAIN MENU" and choice.lower() == "q":
-                return len(menu_options) - 1
+                return MainMenu.EXIT_DISCARD
 
             try:
                 option = int(choice)
@@ -121,21 +146,21 @@ class EmailManager:
         while True:
             choice = self._display_menu_and_get_choice("RULES MANAGEMENT", menu_options)
 
-            if choice == 0:  # Show all rules
+            if choice == RulesMenu.SHOW_RULES:
                 self.rule_manager.display_rules()
-            elif choice == 1:  # Create rule from a message
+            elif choice == RulesMenu.CREATE_RULE:
                 self.move_message(create_rule=True)
-            elif choice == 2:  # Apply a specific rule
+            elif choice == RulesMenu.APPLY_ONE_RULE:
                 self.apply_one_rule()
-            elif choice == 3:  # Apply all 'always' rules
+            elif choice == RulesMenu.APPLY_ALL_RULES:
                 self.apply_all_rules()
-            elif choice == 4:  # Organize rules
+            elif choice == RulesMenu.ORGANIZE_RULES:
                 self.organize_rules()
-            elif choice == 5:  # Save rules to file
+            elif choice == RulesMenu.SAVE_RULES:
                 self.rule_manager.save_rules()
-            elif choice == 6:  # Reload rules from file
+            elif choice == RulesMenu.RELOAD_RULES:
                 self.load_rules()
-            elif choice == 7:  # Back to Main Menu
+            elif choice == RulesMenu.BACK_TO_MAIN:
                 print("Returning to main menu...")
                 break
 
@@ -471,24 +496,24 @@ def main():
         while True:
             choice = manager.display_main_menu()
 
-            if choice == 0:  # Purge deleted mails
+            if choice == MainMenu.PURGE_DELETED:
                 manager.purge_deleted_mails()
-            elif choice == 1:  # Move mail
+            elif choice == MainMenu.MOVE_MAIL:
                 manager.move_message(create_rule=False)
-            elif choice == 2:  # Change current folder
+            elif choice == MainMenu.CHANGE_FOLDER:
                 manager.change_folder()
-            elif choice == 3:  # List unread messages
+            elif choice == MainMenu.LIST_UNREAD:
                 manager.list_unread_messages()
-            elif choice == 4:  # Rules Management
+            elif choice == MainMenu.RULES_MANAGEMENT:
                 manager._rules_submenu()
-            elif choice == 5:  # Reconnect
+            elif choice == MainMenu.RECONNECT:
                 manager.reconnect()
-            elif choice == 6:  # Exit (ask to save rules)
+            elif choice == MainMenu.EXIT_SAVE:
                 if input("Save rules before quitting? (y/n): ").lower() == "y":
                     manager.rule_manager.save_rules()
                 print("Exiting.")
                 break
-            elif choice == 7:  # Exit (discard changes)
+            elif choice == MainMenu.EXIT_DISCARD:
                 print("Exiting without saving changes.")
                 break
 
