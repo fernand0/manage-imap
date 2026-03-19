@@ -10,6 +10,8 @@ import os
 from dataclasses import dataclass, asdict
 from typing import Dict, List, Optional, Any
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class EmailRule:
@@ -45,7 +47,7 @@ class EmailRuleManager:
     def _load_rules(self) -> None:
         """Load rules from JSON file."""
         if not os.path.exists(self.rules_file):
-            logging.info(f"No rules file found at {self.rules_file}, starting with empty rules")
+            logger.info(f"No rules file found at {self.rules_file}, starting with empty rules")
             return
 
         try:
@@ -56,9 +58,9 @@ class EmailRuleManager:
                     return
                 data = json.loads(content)
                 self._parse_json_rules(data)
-                logging.info("Loaded rules from JSON file")
+                logger.info("Loaded rules from JSON file")
         except (json.JSONDecodeError, UnicodeDecodeError, KeyError) as e:
-            logging.error(f"Failed to load rules: {e}")
+            logger.error(f"Failed to load rules: {e}")
             raise
 
     def _parse_json_rules(self, data: Dict[str, Any]) -> None:
@@ -92,9 +94,9 @@ class EmailRuleManager:
             with open(self.rules_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
             
-            logging.info(f"Rules saved to {self.rules_file}")
+            logger.info(f"Rules saved to {self.rules_file}")
         except Exception as e:
-            logging.error(f"Failed to save rules: {e}")
+            logger.error(f"Failed to save rules: {e}")
 
     def add_rule(self, rule: tuple | EmailRule, rule_type: str = "sometimes") -> None:
         """Add a new rule to the specified category."""
@@ -108,7 +110,7 @@ class EmailRuleManager:
         # Check for duplicates
         if rule not in self.rules[rule_type]:
             self.rules[rule_type].append(rule)
-            logging.info(f"Added rule to {rule_type}: {rule.keyword} -> {rule.folder}")
+            logger.info(f"Added rule to {rule_type}: {rule.keyword} -> {rule.folder}")
 
     def remove_rule(self, rule: tuple | EmailRule, rule_type: str) -> bool:
         """Remove a rule from the specified category."""
@@ -118,7 +120,7 @@ class EmailRuleManager:
 
         if rule_type in self.rules and rule in self.rules[rule_type]:
             self.rules[rule_type].remove(rule)
-            logging.info(f"Removed rule from {rule_type}: {rule.keyword} -> {rule.folder}")
+            logger.info(f"Removed rule from {rule_type}: {rule.keyword} -> {rule.folder}")
             return True
         return False
 
@@ -155,7 +157,7 @@ class EmailRuleManager:
         """Clear all rules, or rules of a specific type."""
         if rule_type:
             self.rules[rule_type] = []
-            logging.info(f"Cleared all '{rule_type}' rules")
+            logger.info(f"Cleared all '{rule_type}' rules")
         else:
             self.rules = {"always": [], "sometimes": []}
-            logging.info("Cleared all rules")
+            logger.info("Cleared all rules")

@@ -12,6 +12,15 @@ import sys
 from enum import IntEnum
 from typing import List, Tuple, Optional, Any
 
+# Configure logging at module level
+logging.basicConfig(
+    stream=sys.stdout,
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+
+logger = logging.getLogger(__name__)
+
 
 class MainMenu(IntEnum):
     """Main menu options."""
@@ -49,15 +58,6 @@ class EmailManager:
         self.api_src: Optional[Any] = None
         self.rules_file = rules_file or f"{DATADIR}/rulesSieve.dat"
         self.rule_manager: Optional[EmailRuleManager] = None
-        self._setup_logging()
-
-    def _setup_logging(self) -> None:
-        """Configure logging for the application."""
-        logging.basicConfig(
-            stream=sys.stdout,
-            level=logging.INFO,
-            format="%(asctime)s - %(levelname)s - %(message)s",
-        )
 
     def initialize(self) -> None:
         """Initialize the email manager with API and rules."""
@@ -71,21 +71,21 @@ class EmailManager:
             self.rule_manager = EmailRuleManager(self.rules_file)
 
         except Exception as e:
-            logging.error(f"Failed to initialize: {e}")
+            logger.error(f"Failed to initialize: {e}")
             raise
 
     def reconnect(self) -> None:
         """Re-establish the IMAP session."""
-        logging.info("Re-establishing IMAP session...")
+        logger.info("Re-establishing IMAP session...")
         try:
             import socialModules.moduleRules
 
             rules = socialModules.moduleRules.moduleRules()
             rules.checkRules()
             self.api_src = rules.selectRuleInteractive("imap")
-            logging.info("IMAP session re-established successfully.")
+            logger.info("IMAP session re-established successfully.")
         except Exception as e:
-            logging.error(f"Failed to re-establish session: {e}")
+            logger.error(f"Failed to re-establish session: {e}")
 
     def _display_menu_and_get_choice(
         self, menu_title: str, menu_options: List[str]
@@ -203,7 +203,7 @@ class EmailManager:
                         print("Please enter a valid number or 'q'.")
 
         except Exception as e:
-            logging.error(f"Error selecting message: {e}")
+            logger.error(f"Error selecting message: {e}")
 
         return selected_msg
 
@@ -217,7 +217,7 @@ class EmailManager:
             (keyword, textt, textHeader) = self.api_src.selectHeaderAuto(
                 self.api_src, msg
             )
-            logging.info(f"Rule based on: Header='{keyword}', Content='{textHeader}'")
+            logger.info(f"Rule based on: Header='{keyword}', Content='{textHeader}'")
 
             textHeaderS = textHeader
             if "Subject" not in keyword and "@" in textHeader:
@@ -230,7 +230,7 @@ class EmailManager:
                 self.api_src.getClient(), folderM=textHeaderS
             )
             if not folder:
-                logging.warning("No folder selected. Aborting.")
+                logger.warning("No folder selected. Aborting.")
                 return
 
             new_rule = (keyword, textHeader, folder)
@@ -246,7 +246,7 @@ class EmailManager:
                     print("Invalid rule type. Rule not saved.")
 
         except Exception as e:
-            logging.error(f"An error occurred while moving message: {e}", exc_info=True)
+            logger.error(f"An error occurred while moving message: {e}", exc_info=True)
 
     def load_rules(self) -> None:
         """Explicitly re-loads rules from the file."""
@@ -265,7 +265,7 @@ class EmailManager:
             keyword, text_header, folder = rule
 
         search_criteria = f'(HEADER {keyword} "{text_header}")'
-        logging.info(
+        logger.info(
             f"Applying rule: moving messages matching '{search_criteria}' to '{folder}'"
         )
 
@@ -366,11 +366,11 @@ class EmailManager:
             folder = self.api_src.selectFolder(None)
             if folder:
                 self.api_src.setChannel(folder)
-                logging.info(f"Switched to folder: {self.api_src.getChannel()}")
+                logger.info(f"Switched to folder: {self.api_src.getChannel()}")
             else:
                 print("No folder selected or folder selection cancelled.")
         except Exception as e:
-            logging.error(f"Failed to change folder: {e}", exc_info=True)
+            logger.error(f"Failed to change folder: {e}", exc_info=True)
 
     def organize_rules(self) -> None:
         """Move a rule to a different category or delete it."""
@@ -384,7 +384,7 @@ class EmailManager:
         rule_to_move, original_category = result
 
         if not original_category:
-            logging.error(
+            logger.error(
                 "Could not find the selected rule in any category. This should not happen."
             )
             return
@@ -409,14 +409,14 @@ class EmailManager:
             else:
                 print("Rule deleted.")
         else:
-            logging.error("Failed to remove the rule from its original category.")
+            logger.error("Failed to remove the rule from its original category.")
 
     def list_unread_messages(self) -> None:
         """Lists unread messages in the current folder and offers to mark them as read."""
         try:
             self.api_src.setPosts()
             current_folder = self.api_src.getChannel()
-            logging.info(f"Searching for unread messages in '{current_folder}'...")
+            logger.info(f"Searching for unread messages in '{current_folder}'...")
 
             self.api_src.setChannel(current_folder)
 
@@ -444,7 +444,7 @@ class EmailManager:
                 print(f"{len(unread_msg_ids)} message(s) marked as read.")
 
         except Exception as e:
-            logging.error(f"Failed to list or update unread messages: {e}", exc_info=True)
+            logger.error(f"Failed to list or update unread messages: {e}", exc_info=True)
 
     def purge_deleted_mails(self) -> None:
         """Permanently delete emails marked for deletion in the current folder."""
@@ -458,7 +458,7 @@ class EmailManager:
             return
 
         try:
-            logging.info(f"Expunging messages in folder '{current_folder}'...")
+            logger.info(f"Expunging messages in folder '{current_folder}'...")
             self.api_src.setPosts()
             typ, data = self.api_src.getClient().expunge()
             if typ == "OK":
@@ -467,11 +467,11 @@ class EmailManager:
                     f"Successfully purged {purged_count} message(s) from '{current_folder}'."
                 )
             else:
-                logging.error(
+                logger.error(
                     f"Failed to expunge folder. Server response: {typ} {data}"
                 )
         except Exception as e:
-            logging.error(f"An error occurred during expunge: {e}", exc_info=True)
+            logger.error(f"An error occurred during expunge: {e}", exc_info=True)
 
 
 def main():
@@ -520,7 +520,7 @@ def main():
             input("\nPress Enter to continue...")
 
     except Exception as e:
-        logging.error(f"Application failed to start: {e}", exc_info=True)
+        logger.error(f"Application failed to start: {e}", exc_info=True)
         sys.exit(1)
 
 
