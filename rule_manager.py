@@ -60,7 +60,7 @@ class EmailRuleManager:
                 self._parse_json_rules(data)
                 logger.info("Loaded rules from JSON file")
         except (json.JSONDecodeError, UnicodeDecodeError, KeyError) as e:
-            logger.error(f"Failed to load rules: {e}")
+            logger.exception("Failed to load rules")
             raise
 
     def _parse_json_rules(self, data: Dict[str, Any]) -> None:
@@ -96,7 +96,7 @@ class EmailRuleManager:
             
             logger.info(f"Rules saved to {self.rules_file}")
         except Exception as e:
-            logger.error(f"Failed to save rules: {e}")
+            logger.exception("Failed to save rules")
 
     def add_rule(self, rule: tuple | EmailRule, rule_type: str = "sometimes") -> None:
         """Add a new rule to the specified category."""

@@ -71,7 +71,7 @@ class EmailManager:
             self.rule_manager = EmailRuleManager(self.rules_file)
 
         except Exception as e:
-            logger.error(f"Failed to initialize: {e}")
+            logger.exception("Failed to initialize")
             raise
 
     def reconnect(self) -> None:
@@ -85,7 +85,7 @@ class EmailManager:
             self.api_src = rules.selectRuleInteractive("imap")
             logger.info("IMAP session re-established successfully.")
         except Exception as e:
-            logger.error(f"Failed to re-establish session: {e}")
+            logger.exception("Failed to re-establish session")
 
     def _display_menu_and_get_choice(
         self, menu_title: str, menu_options: List[str]
@@ -203,7 +203,7 @@ class EmailManager:
                         print("Please enter a valid number or 'q'.")
 
         except Exception as e:
-            logger.error(f"Error selecting message: {e}")
+            logger.exception("Error selecting message")
 
         return selected_msg
 
@@ -246,7 +246,7 @@ class EmailManager:
                     print("Invalid rule type. Rule not saved.")
 
         except Exception as e:
-            logger.error(f"An error occurred while moving message: {e}", exc_info=True)
+            logger.exception("An error occurred while moving message")
 
     def load_rules(self) -> None:
         """Explicitly re-loads rules from the file."""
@@ -370,7 +370,7 @@ class EmailManager:
             else:
                 print("No folder selected or folder selection cancelled.")
         except Exception as e:
-            logger.error(f"Failed to change folder: {e}", exc_info=True)
+            logger.exception("Failed to change folder")
 
     def organize_rules(self) -> None:
         """Move a rule to a different category or delete it."""
@@ -444,7 +444,7 @@ class EmailManager:
                 print(f"{len(unread_msg_ids)} message(s) marked as read.")
 
         except Exception as e:
-            logger.error(f"Failed to list or update unread messages: {e}", exc_info=True)
+            logger.exception("Failed to list or update unread messages")
 
     def purge_deleted_mails(self) -> None:
         """Permanently delete emails marked for deletion in the current folder."""
@@ -471,7 +471,7 @@ class EmailManager:
                     f"Failed to expunge folder. Server response: {typ} {data}"
                 )
         except Exception as e:
-            logger.error(f"An error occurred during expunge: {e}", exc_info=True)
+            logger.exception("An error occurred during expunge")
 
 
 def main():
@@ -520,7 +520,7 @@ def main():
             input("\nPress Enter to continue...")
 
     except Exception as e:
-        logger.error(f"Application failed to start: {e}", exc_info=True)
+        logger.exception("Application failed to start")
         sys.exit(1)
 
 
