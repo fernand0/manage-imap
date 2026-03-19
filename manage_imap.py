@@ -496,7 +496,6 @@ def main():
                 print("Exiting without saving changes.")
                 break
 
-        input("\nPress Enter to continue...")
 
     except Exception as e:
         logging.error(f"Application failed to start: {e}", exc_info=True)
