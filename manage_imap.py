@@ -63,6 +63,10 @@ class EmailManager:
         self.rules_file = rules_file or f"{DATADIR}/rulesSieve.dat"
         self.rule_manager: Optional[EmailRuleManager] = None
 
+    def _print_status(self, message: str) -> None:
+        """Print a user-facing status message."""
+        print(message)
+
     def initialize(self) -> None:
         """Initialize the email manager with API and rules."""
         try:
@@ -165,7 +169,7 @@ class EmailManager:
             elif choice == RulesMenu.RELOAD_RULES:
                 self.load_rules()
             elif choice == RulesMenu.BACK_TO_MAIN:
-                print("Returning to main menu...")
+                self._print_status("Returning to main menu...")
                 break
 
             input("\nPress Enter to continue...")
@@ -179,11 +183,11 @@ class EmailManager:
             posts = self.api_src.getPosts()
 
             if not posts:
-                print(
+                self._print_status(
                     f"No messages found in current folder: {self.api_src.getChannel()}"
                 )
             else:
-                print("\nRecent messages:")
+                self._print_status("\nRecent messages:")
                 for i, msg in enumerate(posts[-RECENT_MESSAGES_LIMIT:]):
                     from_addr = self.api_src.getPostFrom(msg)
                     subject = self.api_src.getPostTitle(msg)
@@ -247,17 +251,17 @@ class EmailManager:
                 elif rule_type == "s":
                     self.rule_manager.add_rule(new_rule, "sometimes")
                 else:
-                    print("Invalid rule type. Rule not saved.")
+                    self._print_status("Invalid rule type. Rule not saved.")
 
         except Exception as e:
             logger.exception("An error occurred while moving message")
 
     def load_rules(self) -> None:
         """Explicitly re-loads rules from the file."""
-        print("Reloading rules...")
+        self._print_status("Reloading rules...")
         if self.rule_manager:
             self.rule_manager = EmailRuleManager(self.rules_file)
-        print("Rules reloaded.")
+        self._print_status("Rules reloaded.")
 
     def _apply_rule_logic(self, rule: Tuple | EmailRule, interactive: bool) -> None:
         """The core logic for applying a single rule."""
@@ -282,20 +286,20 @@ class EmailManager:
             )
 
         if not msg_ids or not msg_ids[0]:
-            print("No messages found matching this rule.")
+            self._print_status("No messages found matching this rule.")
             return
 
         msg_list_str = msg_ids[0].decode("utf-8").replace(" ", ",")
         msg_count = len(msg_list_str.split(","))
-        print(f"Found {msg_count} messages matching the rule.")
+        self._print_status(f"Found {msg_count} messages matching the rule.")
 
         if interactive:
             if input("Proceed with moving messages? (y/n): ").lower() != "y":
-                print("Move operation cancelled.")
+                self._print_status("Move operation cancelled.")
                 return
 
         result = self.api_src.moveMails(self.api_src.getClient(), msg_list_str, folder)
-        print(f"Move result: {result}")
+        self._print_status(f"Move result: {result}")
 
     def _select_rule(self) -> Optional[Tuple[EmailRule, str]]:
         """Interactively select a rule from the list.
@@ -307,7 +311,7 @@ class EmailManager:
 
         categories = list(self.rule_manager.rules.keys())
         if not categories:
-            print("No rule categories found.")
+            self._print_status("No rule categories found.")
             return None
 
         cat_choice = None
@@ -326,7 +330,7 @@ class EmailManager:
 
         rules_in_cat = self.rule_manager.rules[cat_choice]
         if not rules_in_cat:
-            print(f"No rules in category '{cat_choice}'.")
+            self._print_status(f"No rules in category '{cat_choice}'.")
             return None
 
         while True:
@@ -353,36 +357,36 @@ class EmailManager:
 
     def apply_all_rules(self) -> None:
         """Apply all rules in the 'always' category non-interactively."""
-        print("Applying all 'always' rules...")
+        self._print_status("Applying all 'always' rules...")
         always_rules = self.rule_manager.rules.get("always", [])
         if not always_rules:
-            print("No 'always' rules to apply.")
+            self._print_status("No 'always' rules to apply.")
             return
 
         for rule in always_rules:
             self._apply_rule_logic(rule, interactive=False)
-        print("Finished applying all rules.")
+        self._print_status("Finished applying all rules.")
 
     def change_folder(self) -> None:
         """Allows the user to select a different IMAP folder."""
-        print("Fetching folder list...")
+        self._print_status("Fetching folder list...")
         try:
             folder = self.api_src.selectFolder(None)
             if folder:
                 self.api_src.setChannel(folder)
                 logger.info(f"Switched to folder: {self.api_src.getChannel()}")
             else:
-                print("No folder selected or folder selection cancelled.")
+                self._print_status("No folder selected or folder selection cancelled.")
         except Exception as e:
             logger.exception("Failed to change folder")
 
     def organize_rules(self) -> None:
         """Move a rule to a different category or delete it."""
-        print("\n--- Organize Rules ---")
+        self._print_status("\n--- Organize Rules ---")
 
         result = self._select_rule()
         if not result:
-            print("No rule selected.")
+            self._print_status("No rule selected.")
             return
 
         rule_to_move, original_category = result
@@ -393,7 +397,9 @@ class EmailManager:
             )
             return
 
-        print(f"\nSelected rule: {rule_to_move.keyword}='{rule_to_move.pattern}' -> {rule_to_move.folder} (from '{original_category}')")
+        self._print_status(
+            f"\nSelected rule: {rule_to_move.keyword}='{rule_to_move.pattern}' -> {rule_to_move.folder} (from '{original_category}')"
+        )
 
         dest_categories = [
             cat for cat in self.rule_manager.rules.keys() if cat != original_category
@@ -409,9 +415,9 @@ class EmailManager:
         if self.rule_manager.remove_rule(rule_to_move, original_category):
             if dest_choice != "delete":
                 self.rule_manager.add_rule(rule_to_move, dest_choice)
-                print(f"Rule moved from '{original_category}' to '{dest_choice}'.")
+                self._print_status(f"Rule moved from '{original_category}' to '{dest_choice}'.")
             else:
-                print("Rule deleted.")
+                self._print_status("Rule deleted.")
         else:
             logger.error("Failed to remove the rule from its original category.")
 
@@ -427,11 +433,11 @@ class EmailManager:
             status, msg_ids = self.api_src.getClient().search(None, '(UNSEEN)')
 
             if status != 'OK' or not msg_ids[0]:
-                print("No unread messages found in this folder.")
+                self._print_status("No unread messages found in this folder.")
                 return
 
             unread_msg_ids = msg_ids[0].decode('utf-8').split()
-            print(f"Found {len(unread_msg_ids)} unread messages.")
+            self._print_status(f"Found {len(unread_msg_ids)} unread messages.")
 
             for msg_id in unread_msg_ids:
                 stat, data = self.api_src.getClient().fetch(
@@ -445,7 +451,7 @@ class EmailManager:
             if input("\nMark these messages as read? (y/n): ").lower() == 'y':
                 for msg_id in unread_msg_ids:
                     self.api_src.getClient().store(msg_id, '+FLAGS', '\\Seen')
-                print(f"{len(unread_msg_ids)} message(s) marked as read.")
+                self._print_status(f"{len(unread_msg_ids)} message(s) marked as read.")
 
         except Exception as e:
             logger.exception("Failed to list or update unread messages")
@@ -453,12 +459,12 @@ class EmailManager:
     def purge_deleted_mails(self) -> None:
         """Permanently delete emails marked for deletion in the current folder."""
         current_folder = self.api_src.getChannel()
-        print(
+        self._print_status(
             f"This will permanently delete all emails marked for deletion in the folder '{current_folder}'."
         )
 
         if input("Are you sure you want to proceed? (y/n): ").lower() != "y":
-            print("Purge operation cancelled.")
+            self._print_status("Purge operation cancelled.")
             return
 
         try:
@@ -467,7 +473,7 @@ class EmailManager:
             typ, data = self.api_src.getClient().expunge()
             if typ == "OK":
                 purged_count = len(data) if data and data[0] is not None else 0
-                print(
+                self._print_status(
                     f"Successfully purged {purged_count} message(s) from '{current_folder}'."
                 )
             else:
@@ -515,10 +521,10 @@ def main():
             elif choice == MainMenu.EXIT_SAVE:
                 if input("Save rules before quitting? (y/n): ").lower() == "y":
                     manager.rule_manager.save_rules()
-                print("Exiting.")
+                self._print_status("Exiting.")
                 break
             elif choice == MainMenu.EXIT_DISCARD:
-                print("Exiting without saving changes.")
+                self._print_status("Exiting without saving changes.")
                 break
 
             input("\nPress Enter to continue...")
