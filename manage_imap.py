@@ -67,6 +67,53 @@ class EmailManager:
         """Print a user-facing status message."""
         print(message)
 
+    def _get_int_input(
+        self,
+        prompt: str,
+        min_val: int = 0,
+        max_val: Optional[int] = None,
+        error_msg: str = "Please enter a valid number",
+    ) -> Optional[int]:
+        """Get integer input from user with range validation.
+
+        Args:
+            prompt: The input prompt to display.
+            min_val: Minimum allowed value (inclusive).
+            max_val: Maximum allowed value (inclusive), or None for no upper limit.
+            error_msg: Error message to display for invalid input.
+
+        Returns:
+            The validated integer, or None if input was invalid/cancelled.
+        """
+        try:
+            value = int(input(prompt).strip())
+            if max_val is not None and not (min_val <= value <= max_val):
+                print(f"Please enter a number between {min_val} and {max_val}")
+                return None
+            if value < min_val:
+                print(f"Please enter a number >= {min_val}")
+                return None
+            return value
+        except ValueError:
+            print(error_msg)
+            return None
+
+    def _confirm(self, message: str, default: bool = False) -> bool:
+        """Get yes/no confirmation from user.
+
+        Args:
+            message: The confirmation message to display.
+            default: Default value if user just presses Enter.
+
+        Returns:
+            True for yes, False for no.
+        """
+        suffix = "Y/n" if default else "y/N"
+        response = input(f"{message} ({suffix}): ").lower().strip()
+        if not response:
+            return default
+        return response in ("y", "yes")
+
     def initialize(self) -> None:
         """Initialize the email manager with API and rules."""
         try:
@@ -184,22 +231,22 @@ class EmailManager:
 
     def _get_message_choice(self, posts: List[Any]) -> Optional[Any]:
         """Get message selection from user."""
+        max_msg = len(posts[-RECENT_MESSAGES_LIMIT:]) - 1
         while True:
-            try:
-                choice = input(
-                    f"Select message number (0-{RECENT_MESSAGES_LIMIT - 1}) or 'q' to quit: "
-                ).strip()
-                if choice.lower() == "q":
-                    return None
+            choice = input(
+                f"Select message number (0-{max_msg}) or 'q' to quit: "
+            ).strip()
+            if choice.lower() == "q":
+                return None
 
-                msg_num = int(choice)
-                if 0 <= msg_num < len(posts[-RECENT_MESSAGES_LIMIT:]):
-                    return posts[-(RECENT_MESSAGES_LIMIT - msg_num)]
-                else:
-                    print("Invalid message number.")
-
-            except ValueError:
-                print("Please enter a valid number or 'q'.")
+            msg_num = self._get_int_input(
+                "",
+                min_val=0,
+                max_val=max_msg,
+                error_msg="Please enter a valid number or 'q'.",
+            )
+            if msg_num is not None:
+                return posts[-(RECENT_MESSAGES_LIMIT - msg_num)]
 
     def select_message(self) -> Optional[Any]:
         """Select a message from the current folder."""
@@ -307,10 +354,9 @@ class EmailManager:
         msg_count = len(msg_list_str.split(","))
         self._print_status(f"Found {msg_count} messages matching the rule.")
 
-        if interactive:
-            if input("Proceed with moving messages? (y/n): ").lower() != "y":
-                self._print_status("Move operation cancelled.")
-                return
+        if interactive and not self._confirm("Proceed with moving messages"):
+            self._print_status("Move operation cancelled.")
+            return
 
         result = self.api_src.moveMails(self.api_src.getClient(), msg_list_str, folder)
         self._print_status(f"Move result: {result}")
@@ -358,19 +404,17 @@ class EmailManager:
     def _get_rule_index(self, rule_count: int) -> Optional[int]:
         """Get rule index selection from user."""
         while True:
-            try:
-                rule_num_str = input(
-                    f"Select rule number (0-{rule_count - 1}) or 'q' to quit: "
-                ).strip()
-                if rule_num_str.lower() == "q":
-                    return None
-                rule_num = int(rule_num_str)
-                if 0 <= rule_num < rule_count:
-                    return rule_num
-                else:
-                    print("Invalid rule number.")
-            except ValueError:
-                print("Please enter a valid number.")
+            rule_num_str = input(
+                f"Select rule number (0-{rule_count - 1}) or 'q' to quit: "
+            ).strip()
+            if rule_num_str.lower() == "q":
+                return None
+            return self._get_int_input(
+                "",
+                min_val=0,
+                max_val=rule_count - 1,
+                error_msg="Please enter a valid number.",
+            )
 
     def apply_one_rule(self) -> None:
         """Select and apply a single rule interactively."""
@@ -479,7 +523,7 @@ class EmailManager:
                     header_lines = [line for line in header.split('\r\n') if line]
                     print(f"- ID: {msg_id}, " + ", ".join(header_lines))
 
-            if input("\nMark these messages as read? (y/n): ").lower() == 'y':
+            if self._confirm("Mark these messages as read"):
                 for msg_id in unread_msg_ids:
                     self.api_src.getClient().store(msg_id, '+FLAGS', '\\Seen')
                 self._print_status(f"{len(unread_msg_ids)} message(s) marked as read.")
@@ -494,7 +538,7 @@ class EmailManager:
             f"This will permanently delete all emails marked for deletion in the folder '{current_folder}'."
         )
 
-        if input("Are you sure you want to proceed? (y/n): ").lower() != "y":
+        if not self._confirm("Are you sure you want to proceed"):
             self._print_status("Purge operation cancelled.")
             return
 
@@ -550,12 +594,12 @@ def main():
             elif choice == MainMenu.RECONNECT:
                 manager.reconnect()
             elif choice == MainMenu.EXIT_SAVE:
-                if input("Save rules before quitting? (y/n): ").lower() == "y":
+                if manager._confirm("Save rules before quitting"):
                     manager.rule_manager.save_rules()
-                self._print_status("Exiting.")
+                manager._print_status("Exiting.")
                 break
             elif choice == MainMenu.EXIT_DISCARD:
-                self._print_status("Exiting without saving changes.")
+                manager._print_status("Exiting without saving changes.")
                 break
 
             input("\nPress Enter to continue...")
