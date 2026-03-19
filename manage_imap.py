@@ -164,7 +164,7 @@ class EmailManager:
 
             # Allow 'q' to exit from the main menu
             if menu_title == "MAIN MENU" and choice.lower() == "q":
-                return MainMenu.EXIT_DISCARD
+                choice = str(MainMenu.EXIT_DISCARD)
 
             try:
                 option = int(choice)
@@ -280,12 +280,15 @@ class EmailManager:
 
     def _get_rule_type_from_user(self) -> Optional[str]:
         """Get rule type (always/sometimes) from user."""
-        rule_type = input("Make rule (a)lways or (s)ometimes? ").lower()
-        if rule_type == "a":
-            return "always"
-        elif rule_type == "s":
-            return "sometimes"
-        return None
+        while True:
+            rule_type = input("Make rule (a)lways or (s)ometimes? (or 'q' to quit): ").lower()
+            if rule_type == "q":
+                return None
+            if rule_type == "a":
+                return "always"
+            if rule_type == "s":
+                return "sometimes"
+            print("Invalid option. Please enter 'a' for always, 's' for sometimes, or 'q' to quit.")
 
     def move_message(self, create_rule: bool = False) -> None:
         """Selects a message, moves it to a folder, and optionally creates a rule."""
@@ -312,7 +315,9 @@ class EmailManager:
 
             if create_rule:
                 rule_type = self._get_rule_type_from_user()
-                if rule_type:
+                if rule_type is None:
+                    self._print_status("Rule creation cancelled.")
+                elif rule_type:
                     self.rule_manager.add_rule(new_rule, rule_type)
                 else:
                     self._print_status("Invalid rule type. Rule not saved.")
@@ -394,15 +399,18 @@ class EmailManager:
 
     def _get_category_choice(self, categories: List[str]) -> Optional[str]:
         """Get category selection from user."""
-        while True:
-            cat_choice = input(
+        cat_choice = None
+        while cat_choice is None:
+            user_input = input(
                 f"Select category ({'/'.join(categories)}) or 'q' to quit: "
             ).lower()
-            if cat_choice == "q":
+            if user_input == "q":
                 return None
-            if cat_choice in categories:
-                return cat_choice
-            print("Invalid category.")
+            if user_input in categories:
+                cat_choice = user_input
+            else:
+                print("Invalid category.")
+        return cat_choice
 
     def _get_rule_index(self, rule_count: int) -> Optional[int]:
         """Get rule index selection from user."""
@@ -456,13 +464,18 @@ class EmailManager:
     ) -> Optional[str]:
         """Get destination category from user for rule organization."""
         dest_categories = available_categories + ["delete"]
-        while True:
-            dest_choice = input(
-                f"Move to category ({'/'.join(dest_categories)})? "
+        dest_choice = None
+        while dest_choice is None:
+            user_input = input(
+                f"Move to category ({'/'.join(dest_categories)})? (or 'q' to quit): "
             ).lower()
-            if dest_choice in dest_categories:
-                return dest_choice
-            print("Invalid category.")
+            if user_input == "q":
+                return None
+            if user_input in dest_categories:
+                dest_choice = user_input
+            else:
+                print("Invalid category.")
+        return dest_choice
 
     def organize_rules(self) -> None:
         """Move a rule to a different category or delete it."""
@@ -489,6 +502,10 @@ class EmailManager:
             cat for cat in self.rule_manager.rules.keys() if cat != original_category
         ]
         dest_choice = self._get_destination_category(original_category, available_categories)
+
+        if dest_choice is None:
+            self._print_status("Rule organization cancelled.")
+            return
 
         if self.rule_manager.remove_rule(rule_to_move, original_category):
             if dest_choice != "delete":
