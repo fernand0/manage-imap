@@ -24,6 +24,12 @@ This project uses a virtual environment to manage dependencies.
     pip install .
     ```
 
+3.  **Install development dependencies (optional):**
+
+    ```bash
+    pip install -e ".[dev]"
+    ```
+
 ## Usage
 
 Once the dependencies are installed and the virtual environment is active, run the application with:
@@ -33,6 +39,16 @@ python manage_imap.py
 ```
 
 You will be presented with a menu to manage your emails and rules.
+
+### Command-line Options
+
+```bash
+# Run with custom rules file
+python manage_imap.py --rules-file /path/to/rules.json
+
+# Migrate legacy pickle rules to JSON format
+python manage_imap.py --migrate-only
+```
 
 ## Features
 
@@ -45,6 +61,54 @@ The main menu provides the following options:
 - **Rules Management**: A sub-menu to create, apply, and organize your email filtering rules.
 - **Exit**: Quit the application, with an option to save any rule changes.
 
+## Rule Format
+
+Rules are stored in JSON format with the following structure:
+
+```json
+{
+  "version": "1.0",
+  "always": [
+    {
+      "keyword": "From",
+      "pattern": "notifications@github.com",
+      "folder": "GitHub"
+    }
+  ],
+  "sometimes": [
+    {
+      "keyword": "Subject",
+      "pattern": "Invoice",
+      "folder": "Billing"
+    }
+  ]
+}
+```
+
+### Rule Types
+
+- **always**: Rules that are applied automatically without confirmation
+- **sometimes**: Rules that require confirmation before applying
+
+### Legacy Format Migration
+
+If you have existing rules in the legacy pickle format (`.dat` file), the application will automatically:
+
+1. Detect the legacy format
+2. Create a backup (`.bak` file)
+3. Migrate to the new JSON format
+4. Save the migrated rules
+
+You can also migrate manually using the `--migrate-only` flag.
+
+## Testing
+
+Run the test suite with:
+
+```bash
+pytest tests/ -v
+```
+
 ## ⚠️ Disclaimer
 
-**This code was migrated from a legacy program. While the main functionality has been refactored, the underlying logic for the rules engine has not been formally tested and should be used with caution.**
+**This code was migrated from a legacy program. While the main functionality has been refactored and tested, always backup your rules before migration and test thoroughly in your environment.**

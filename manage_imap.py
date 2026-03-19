@@ -6,22 +6,25 @@ This module provides functionality to manage IMAP emails with rules-based
 organization and automated folder management.
 """
 
+import argparse
 import logging
+import os
 import sys
 from typing import List, Tuple, Optional, Any
 
 
 # Local imports
 from socialModules.configMod import DATADIR
-from rule_manager import EmailRuleManager
+from rule_manager import EmailRuleManager, EmailRule
 
 
 class EmailManager:
     """Main email management class."""
 
-    def __init__(self):
-        self.api_src = None
-        self.rule_manager = None
+    def __init__(self, rules_file: Optional[str] = None):
+        self.api_src: Optional[Any] = None
+        self.rules_file = rules_file or f"{DATADIR}/rulesSieve.dat"
+        self.rule_manager: Optional[EmailRuleManager] = None
         self._setup_logging()
 
     def _setup_logging(self) -> None:
@@ -41,8 +44,7 @@ class EmailManager:
             rules.checkRules()
 
             self.api_src = rules.selectRuleInteractive("imap")
-            rules_file = f"{DATADIR}/rulesSieve.dat"
-            self.rule_manager = EmailRuleManager(rules_file)
+            self.rule_manager = EmailRuleManager(self.rules_file)
 
         except Exception as e:
             logging.error(f"Failed to initialize: {e}")
@@ -77,7 +79,7 @@ class EmailManager:
 
             # Allow 'q' to exit from the main menu, corresponding to option 7
             if menu_title == "MAIN MENU" and choice.lower() == "q":
-                return 7
+                return len(menu_options) - 1
 
             try:
                 option = int(choice)
@@ -142,7 +144,7 @@ class EmailManager:
 
     def select_message(self) -> Optional[Any]:
         """Select a message from the current folder."""
-        selected_msg = None  # Single exit point variable
+        selected_msg = None
 
         try:
             self.api_src.setPosts()
@@ -152,7 +154,6 @@ class EmailManager:
                 print(
                     f"No messages found in current folder: {self.api_src.getChannel()}"
                 )
-                # selected_msg remains None, and the function will return it.
             else:
                 print("\nRecent messages:")
                 for i, msg in enumerate(posts[-15:]):
@@ -160,23 +161,17 @@ class EmailManager:
                     subject = self.api_src.getPostTitle(msg)
                     print(f"{i}: {from_addr} - {subject}")
 
-                # Loop to get valid message number
-                while (
-                    selected_msg is None
-                ):  # Loop until a message is selected or user quits
+                while selected_msg is None:
                     try:
                         choice = input(
                             "Select message number (or 'q' to quit): "
                         ).strip()
                         if choice.lower() == "q":
-                            # selected_msg remains None, loop breaks, function returns None
                             break
 
                         msg_num = int(choice)
                         if 0 <= msg_num < len(posts[-15:]):
-                            selected_msg = posts[
-                                -(15 - msg_num)
-                            ]  # Assign to variable, loop will terminate
+                            selected_msg = posts[-(15 - msg_num)]
                         else:
                             print("Invalid message number.")
 
@@ -185,9 +180,8 @@ class EmailManager:
 
         except Exception as e:
             logging.error(f"Error selecting message: {e}")
-            # selected_msg remains None, function will return it.
 
-        return selected_msg  # Single exit point
+        return selected_msg
 
     def move_message(self, create_rule: bool = False) -> None:
         """Selects a message, moves it to a folder, and optionally creates a rule."""
@@ -233,19 +227,25 @@ class EmailManager:
     def load_rules(self) -> None:
         """Explicitly re-loads rules from the file."""
         print("Reloading rules...")
-        self.rule_manager.rules = self.rule_manager._load_rules()
+        if self.rule_manager:
+            self.rule_manager = EmailRuleManager(self.rules_file)
         print("Rules reloaded.")
 
-    def _apply_rule_logic(self, rule: Tuple, interactive: bool) -> None:
+    def _apply_rule_logic(self, rule: Tuple | EmailRule, interactive: bool) -> None:
         """The core logic for applying a single rule."""
-        keyword, textHeader, folder = rule
-        search_criteria = f'(HEADER {keyword} "{textHeader}")'
+        # Handle both tuple and EmailRule formats
+        if isinstance(rule, EmailRule):
+            keyword, text_header = rule.keyword, rule.pattern
+            folder = rule.folder
+        else:
+            keyword, text_header, folder = rule
+
+        search_criteria = f'(HEADER {keyword} "{text_header}")'
         logging.info(
             f"Applying rule: moving messages matching '{search_criteria}' to '{folder}'"
         )
 
         try:
-            #self.api_src.setChannel("INBOX")
             self.api_src.setPosts()
             _, msg_ids = self.api_src.getClient().search(None, search_criteria)
         except Exception:
@@ -269,62 +269,58 @@ class EmailManager:
         result = self.api_src.moveMails(self.api_src.getClient(), msg_list_str, folder)
         print(f"Move result: {result}")
 
-    def _select_rule(self) -> Optional[Tuple]:
-        """Interactively select a rule from the list."""
-        selected_rule = None  # Initialize result variable
-
+    def _select_rule(self) -> Optional[Tuple[EmailRule, str]]:
+        """Interactively select a rule from the list.
+        
+        Returns:
+            Tuple of (rule, category) or None if no selection.
+        """
         self.rule_manager.display_rules()
 
         categories = list(self.rule_manager.rules.keys())
         if not categories:
             print("No rule categories found.")
-            # selected_rule remains None
-        else:
-            cat_choice = None
-            while True:
-                cat_choice = input(
-                    f"Select category ({'/'.join(categories)}) or 'q' to quit: "
-                ).lower()
-                if cat_choice == "q":
-                    # selected_rule remains None
-                    break  # Exit loop to return None
-                if cat_choice in categories:
-                    break
-                print("Invalid category.")
+            return None
 
-            if (
-                cat_choice and cat_choice != "q"
-            ):  # Only proceed if a category was selected and not 'q'
-                rules_in_cat = self.rule_manager.rules[cat_choice]
-                if not rules_in_cat:
-                    print(f"No rules in category '{cat_choice}'.")
-                    # selected_rule remains None
+        cat_choice = None
+        while True:
+            cat_choice = input(
+                f"Select category ({'/'.join(categories)}) or 'q' to quit: "
+            ).lower()
+            if cat_choice == "q":
+                return None
+            if cat_choice in categories:
+                break
+            print("Invalid category.")
+
+        if not cat_choice or cat_choice == "q":
+            return None
+
+        rules_in_cat = self.rule_manager.rules[cat_choice]
+        if not rules_in_cat:
+            print(f"No rules in category '{cat_choice}'.")
+            return None
+
+        while True:
+            try:
+                rule_num_str = input(
+                    f"Select rule number (0-{len(rules_in_cat)-1}) or 'q' to quit: "
+                ).strip()
+                if rule_num_str.lower() == "q":
+                    return None
+                rule_num = int(rule_num_str)
+                if 0 <= rule_num < len(rules_in_cat):
+                    return (rules_in_cat[rule_num], cat_choice)
                 else:
-                    while True:
-                        try:
-                            rule_num_str = input(
-                                f"Select rule number (0-{len(rules_in_cat)-1}) or 'q' to quit: "
-                            ).strip()
-                            if rule_num_str.lower() == "q":
-                                # selected_rule remains None
-                                break  # Exit loop to return None
-                            rule_num = int(rule_num_str)
-                            if 0 <= rule_num < len(rules_in_cat):
-                                selected_rule = rules_in_cat[
-                                    rule_num
-                                ]  # Assign to result variable
-                                break  # Exit loop to return selected_rule
-                            else:
-                                print("Invalid rule number.")
-                        except ValueError:
-                            print("Please enter a valid number.")
-
-        return selected_rule  # Single exit point
+                    print("Invalid rule number.")
+            except ValueError:
+                print("Please enter a valid number.")
 
     def apply_one_rule(self) -> None:
         """Select and apply a single rule interactively."""
-        rule_to_apply = self._select_rule()
-        if rule_to_apply:
+        result = self._select_rule()
+        if result:
+            rule_to_apply, _ = result
             self._apply_rule_logic(rule_to_apply, interactive=True)
 
     def apply_all_rules(self) -> None:
@@ -356,16 +352,12 @@ class EmailManager:
         """Move a rule to a different category or delete it."""
         print("\n--- Organize Rules ---")
 
-        rule_to_move = self._select_rule()
-        if not rule_to_move:
+        result = self._select_rule()
+        if not result:
             print("No rule selected.")
             return
 
-        original_category = None
-        for category, rules in self.rule_manager.rules.items():
-            if rule_to_move in rules:
-                original_category = category
-                break
+        rule_to_move, original_category = result
 
         if not original_category:
             logging.error(
@@ -373,7 +365,7 @@ class EmailManager:
             )
             return
 
-        print(f"\nSelected rule: {rule_to_move} (from '{original_category}')")
+        print(f"\nSelected rule: {rule_to_move.keyword}='{rule_to_move.pattern}' -> {rule_to_move.folder} (from '{original_category}')")
 
         dest_categories = [
             cat for cat in self.rule_manager.rules.keys() if cat != original_category
@@ -402,9 +394,8 @@ class EmailManager:
             current_folder = self.api_src.getChannel()
             logging.info(f"Searching for unread messages in '{current_folder}'...")
 
-            self.api_src.setChannel(current_folder)  # Ensure correct folder is selected
-            
-            # Standard IMAP search criteria for unread (unseen) messages
+            self.api_src.setChannel(current_folder)
+
             status, msg_ids = self.api_src.getClient().search(None, '(UNSEEN)')
 
             if status != 'OK' or not msg_ids[0]:
@@ -414,16 +405,15 @@ class EmailManager:
             unread_msg_ids = msg_ids[0].decode('utf-8').split()
             print(f"Found {len(unread_msg_ids)} unread messages.")
 
-            # Fetch headers for display
             for msg_id in unread_msg_ids:
-                stat, data = self.api_src.getClient().fetch(msg_id, '(BODY[HEADER.FIELDS (FROM SUBJECT DATE)])')
+                stat, data = self.api_src.getClient().fetch(
+                    msg_id, '(BODY[HEADER.FIELDS (FROM SUBJECT DATE)])'
+                )
                 if stat == 'OK':
                     header = data[0][1].decode('utf-8')
-                    # Simple formatting for display
                     header_lines = [line for line in header.split('\r\n') if line]
                     print(f"- ID: {msg_id}, " + ", ".join(header_lines))
 
-            # Ask user if they want to mark them as read
             if input("\nMark these messages as read? (y/n): ").lower() == 'y':
                 for msg_id in unread_msg_ids:
                     self.api_src.getClient().store(msg_id, '+FLAGS', '\\Seen')
@@ -462,7 +452,39 @@ class EmailManager:
 
 def main():
     """Main function to run the email manager."""
-    manager = EmailManager()
+    parser = argparse.ArgumentParser(
+        description="IMAP Email Management Tool with rules-based organization"
+    )
+    parser.add_argument(
+        "--rules-file",
+        type=str,
+        default=None,
+        help="Path to rules file (default: from DATADIR)",
+    )
+    parser.add_argument(
+        "--migrate-only",
+        action="store_true",
+        help="Migrate legacy pickle rules to JSON format and exit",
+    )
+    args = parser.parse_args()
+
+    rules_file = args.rules_file or f"{DATADIR}/rulesSieve.dat"
+
+    # Handle migrate-only mode
+    if args.migrate_only:
+        print(f"Migrating rules from: {rules_file}")
+        try:
+            rule_manager = EmailRuleManager(rules_file, create_backup=True)
+            print("Migration completed successfully!")
+            print(f"Rules are now stored in JSON format at: {rules_file}")
+            if os.path.exists(f"{rules_file}.bak"):
+                print(f"Backup created at: {rules_file}.bak")
+        except Exception as e:
+            print(f"Migration failed: {e}")
+            sys.exit(1)
+        return
+
+    manager = EmailManager(rules_file=rules_file)
     try:
         manager.initialize()
 
