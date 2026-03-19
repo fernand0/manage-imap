@@ -174,10 +174,35 @@ class EmailManager:
 
             input("\nPress Enter to continue...")
 
+    def _display_recent_messages(self, posts: List[Any]) -> None:
+        """Display recent messages to the user."""
+        self._print_status("\nRecent messages:")
+        for i, msg in enumerate(posts[-RECENT_MESSAGES_LIMIT:]):
+            from_addr = self.api_src.getPostFrom(msg)
+            subject = self.api_src.getPostTitle(msg)
+            print(f"{i}: {from_addr} - {subject}")
+
+    def _get_message_choice(self, posts: List[Any]) -> Optional[Any]:
+        """Get message selection from user."""
+        while True:
+            try:
+                choice = input(
+                    f"Select message number (0-{RECENT_MESSAGES_LIMIT - 1}) or 'q' to quit: "
+                ).strip()
+                if choice.lower() == "q":
+                    return None
+
+                msg_num = int(choice)
+                if 0 <= msg_num < len(posts[-RECENT_MESSAGES_LIMIT:]):
+                    return posts[-(RECENT_MESSAGES_LIMIT - msg_num)]
+                else:
+                    print("Invalid message number.")
+
+            except ValueError:
+                print("Please enter a valid number or 'q'.")
+
     def select_message(self) -> Optional[Any]:
         """Select a message from the current folder."""
-        selected_msg = None
-
         try:
             self.api_src.setPosts()
             posts = self.api_src.getPosts()
@@ -186,34 +211,31 @@ class EmailManager:
                 self._print_status(
                     f"No messages found in current folder: {self.api_src.getChannel()}"
                 )
-            else:
-                self._print_status("\nRecent messages:")
-                for i, msg in enumerate(posts[-RECENT_MESSAGES_LIMIT:]):
-                    from_addr = self.api_src.getPostFrom(msg)
-                    subject = self.api_src.getPostTitle(msg)
-                    print(f"{i}: {from_addr} - {subject}")
+                return None
 
-                while selected_msg is None:
-                    try:
-                        choice = input(
-                            "Select message number (or 'q' to quit): "
-                        ).strip()
-                        if choice.lower() == "q":
-                            break
-
-                        msg_num = int(choice)
-                        if 0 <= msg_num < len(posts[-RECENT_MESSAGES_LIMIT:]):
-                            selected_msg = posts[-(RECENT_MESSAGES_LIMIT - msg_num)]
-                        else:
-                            print("Invalid message number.")
-
-                    except ValueError:
-                        print("Please enter a valid number or 'q'.")
+            self._display_recent_messages(posts)
+            return self._get_message_choice(posts)
 
         except Exception as e:
             logger.exception("Error selecting message")
 
-        return selected_msg
+    def _extract_folder_suggestion(self, keyword: str, text_header: str) -> str:
+        """Extract a folder suggestion from the header content."""
+        if "Subject" not in keyword and "@" in text_header:
+            domain = text_header.split("@")[1]
+            return next(
+                (part for part in domain.split(".") if part != "www"), text_header
+            )
+        return text_header
+
+    def _get_rule_type_from_user(self) -> Optional[str]:
+        """Get rule type (always/sometimes) from user."""
+        rule_type = input("Make rule (a)lways or (s)ometimes? ").lower()
+        if rule_type == "a":
+            return "always"
+        elif rule_type == "s":
+            return "sometimes"
+        return None
 
     def move_message(self, create_rule: bool = False) -> None:
         """Selects a message, moves it to a folder, and optionally creates a rule."""
@@ -222,34 +244,26 @@ class EmailManager:
             if not msg:
                 return
 
-            (keyword, textt, textHeader) = self.api_src.selectHeaderAuto(
+            (keyword, textt, text_header) = self.api_src.selectHeaderAuto(
                 self.api_src, msg
             )
-            logger.info(f"Rule based on: Header='{keyword}', Content='{textHeader}'")
+            logger.info(f"Rule based on: Header='{keyword}', Content='{text_header}'")
 
-            textHeaderS = textHeader
-            if "Subject" not in keyword and "@" in textHeader:
-                domain = textHeader.split("@")[1]
-                textHeaderS = next(
-                    (part for part in domain.split(".") if part != "www"), textHeaderS
-                )
-
+            folder_suggestion = self._extract_folder_suggestion(keyword, text_header)
             folder = self.api_src.selectFolderN(
-                self.api_src.getClient(), folderM=textHeaderS
+                self.api_src.getClient(), folderM=folder_suggestion
             )
             if not folder:
                 logger.warning("No folder selected. Aborting.")
                 return
 
-            new_rule = (keyword, textHeader, folder)
+            new_rule = (keyword, text_header, folder)
             self._apply_rule_logic(new_rule, interactive=True)
 
             if create_rule:
-                rule_type = input("Make rule (a)lways or (s)ometimes? ").lower()
-                if rule_type == "a":
-                    self.rule_manager.add_rule(new_rule, "always")
-                elif rule_type == "s":
-                    self.rule_manager.add_rule(new_rule, "sometimes")
+                rule_type = self._get_rule_type_from_user()
+                if rule_type:
+                    self.rule_manager.add_rule(new_rule, rule_type)
                 else:
                     self._print_status("Invalid rule type. Rule not saved.")
 
@@ -303,7 +317,7 @@ class EmailManager:
 
     def _select_rule(self) -> Optional[Tuple[EmailRule, str]]:
         """Interactively select a rule from the list.
-        
+
         Returns:
             Tuple of (rule, category) or None if no selection.
         """
@@ -314,18 +328,8 @@ class EmailManager:
             self._print_status("No rule categories found.")
             return None
 
-        cat_choice = None
-        while True:
-            cat_choice = input(
-                f"Select category ({'/'.join(categories)}) or 'q' to quit: "
-            ).lower()
-            if cat_choice == "q":
-                return None
-            if cat_choice in categories:
-                break
-            print("Invalid category.")
-
-        if not cat_choice or cat_choice == "q":
+        cat_choice = self._get_category_choice(categories)
+        if not cat_choice:
             return None
 
         rules_in_cat = self.rule_manager.rules[cat_choice]
@@ -333,16 +337,36 @@ class EmailManager:
             self._print_status(f"No rules in category '{cat_choice}'.")
             return None
 
+        rule_index = self._get_rule_index(len(rules_in_cat))
+        if rule_index is None:
+            return None
+
+        return (rules_in_cat[rule_index], cat_choice)
+
+    def _get_category_choice(self, categories: List[str]) -> Optional[str]:
+        """Get category selection from user."""
+        while True:
+            cat_choice = input(
+                f"Select category ({'/'.join(categories)}) or 'q' to quit: "
+            ).lower()
+            if cat_choice == "q":
+                return None
+            if cat_choice in categories:
+                return cat_choice
+            print("Invalid category.")
+
+    def _get_rule_index(self, rule_count: int) -> Optional[int]:
+        """Get rule index selection from user."""
         while True:
             try:
                 rule_num_str = input(
-                    f"Select rule number (0-{len(rules_in_cat)-1}) or 'q' to quit: "
+                    f"Select rule number (0-{rule_count - 1}) or 'q' to quit: "
                 ).strip()
                 if rule_num_str.lower() == "q":
                     return None
                 rule_num = int(rule_num_str)
-                if 0 <= rule_num < len(rules_in_cat):
-                    return (rules_in_cat[rule_num], cat_choice)
+                if 0 <= rule_num < rule_count:
+                    return rule_num
                 else:
                     print("Invalid rule number.")
             except ValueError:
@@ -380,6 +404,19 @@ class EmailManager:
         except Exception as e:
             logger.exception("Failed to change folder")
 
+    def _get_destination_category(
+        self, original_category: str, available_categories: List[str]
+    ) -> Optional[str]:
+        """Get destination category from user for rule organization."""
+        dest_categories = available_categories + ["delete"]
+        while True:
+            dest_choice = input(
+                f"Move to category ({'/'.join(dest_categories)})? "
+            ).lower()
+            if dest_choice in dest_categories:
+                return dest_choice
+            print("Invalid category.")
+
     def organize_rules(self) -> None:
         """Move a rule to a different category or delete it."""
         self._print_status("\n--- Organize Rules ---")
@@ -401,16 +438,10 @@ class EmailManager:
             f"\nSelected rule: {rule_to_move.keyword}='{rule_to_move.pattern}' -> {rule_to_move.folder} (from '{original_category}')"
         )
 
-        dest_categories = [
+        available_categories = [
             cat for cat in self.rule_manager.rules.keys() if cat != original_category
-        ] + ["delete"]
-        while True:
-            dest_choice = input(
-                f"Move to category ({'/'.join(dest_categories)})? "
-            ).lower()
-            if dest_choice in dest_categories:
-                break
-            print("Invalid category.")
+        ]
+        dest_choice = self._get_destination_category(original_category, available_categories)
 
         if self.rule_manager.remove_rule(rule_to_move, original_category):
             if dest_choice != "delete":
