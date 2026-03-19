@@ -83,20 +83,26 @@ class EmailManager:
             error_msg: Error message to display for invalid input.
 
         Returns:
-            The validated integer, or None if input was invalid/cancelled.
+            The validated integer, or None if user entered 'q' to quit.
         """
+        user_input = input(prompt).strip()
+        
+        # Allow 'q' to quit
+        if user_input.lower() == 'q':
+            return None
+            
         try:
-            value = int(input(prompt).strip())
+            value = int(user_input)
             if max_val is not None and not (min_val <= value <= max_val):
                 print(f"Please enter a number between {min_val} and {max_val}")
-                return None
+                return -1  # Signal to retry
             if value < min_val:
                 print(f"Please enter a number >= {min_val}")
-                return None
+                return -1  # Signal to retry
             return value
         except ValueError:
             print(error_msg)
-            return None
+            return -1  # Signal to retry
 
     def _confirm(self, message: str, default: bool = False) -> bool:
         """Get yes/no confirmation from user.
@@ -233,20 +239,17 @@ class EmailManager:
         """Get message selection from user."""
         max_msg = len(posts[-RECENT_MESSAGES_LIMIT:]) - 1
         while True:
-            choice = input(
-                f"Select message number (0-{max_msg}) or 'q' to quit: "
-            ).strip()
-            if choice.lower() == "q":
-                return None
-
             msg_num = self._get_int_input(
-                "",
+                f"Select message number (0-{max_msg}) or 'q' to quit: ",
                 min_val=0,
                 max_val=max_msg,
                 error_msg="Please enter a valid number or 'q'.",
             )
-            if msg_num is not None:
+            if msg_num is None:  # User typed 'q'
+                return None
+            if msg_num >= 0:  # Valid number
                 return posts[-(RECENT_MESSAGES_LIMIT - msg_num)]
+            # msg_num == -1 means invalid input, loop continues
 
     def select_message(self) -> Optional[Any]:
         """Select a message from the current folder."""
@@ -404,17 +407,17 @@ class EmailManager:
     def _get_rule_index(self, rule_count: int) -> Optional[int]:
         """Get rule index selection from user."""
         while True:
-            rule_num_str = input(
-                f"Select rule number (0-{rule_count - 1}) or 'q' to quit: "
-            ).strip()
-            if rule_num_str.lower() == "q":
-                return None
-            return self._get_int_input(
-                "",
+            result = self._get_int_input(
+                f"Select rule number (0-{rule_count - 1}) or 'q' to quit: ",
                 min_val=0,
                 max_val=rule_count - 1,
                 error_msg="Please enter a valid number.",
             )
+            if result is None:  # User typed 'q'
+                return None
+            if result >= 0:  # Valid number
+                return result
+            # result == -1 means invalid input, loop continues
 
     def apply_one_rule(self) -> None:
         """Select and apply a single rule interactively."""
