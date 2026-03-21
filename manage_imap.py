@@ -225,7 +225,6 @@ class EmailManager:
                 self._print_status("Returning to main menu...")
                 break
 
-            input("\nPress Enter to continue...")
 
     def _display_recent_messages(self, posts: List[Any]) -> None:
         """Display recent messages to the user."""
@@ -622,7 +621,6 @@ def main():
                 manager._print_status("Exiting without saving changes.")
                 break
 
-            input("\nPress Enter to continue...")
 
     except Exception as e:
         logger.exception("Application failed to start")
