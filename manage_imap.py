@@ -52,7 +52,7 @@ class RulesMenu(IntEnum):
 
 # Local imports
 from socialModules.configMod import DATADIR
-from rule_manager import EmailRuleManager, EmailRule
+from socialModules.moduleFilterManager import moduleFilterManager, EmailFilterRule
 
 
 class EmailManager:
@@ -61,7 +61,7 @@ class EmailManager:
     def __init__(self, rules_file: Optional[str] = None):
         self.api_src: Optional[Any] = None
         self.rules_file = rules_file or f"{DATADIR}/rulesSieve.dat"
-        self.rule_manager: Optional[EmailRuleManager] = None
+        self.rule_manager: Optional[moduleFilterManager] = None
 
     def _print_status(self, message: str) -> None:
         """Print a user-facing status message."""
@@ -129,7 +129,12 @@ class EmailManager:
             rules.checkRules()
 
             self.api_src = rules.selectRuleInteractive("imap")
-            self.rule_manager = EmailRuleManager(self.rules_file)
+            
+            # Initialize filter manager using socialModules pattern
+            self.rule_manager = moduleFilterManager()
+            self.rule_manager.user = "filter_manager"
+            self.rule_manager.rules_file = self.rules_file
+            self.rule_manager.setApiPosts()  # Load rules
 
         except Exception as e:
             logger.exception("Failed to initialize")
@@ -218,7 +223,7 @@ class EmailManager:
             elif choice == RulesMenu.ORGANIZE_RULES:
                 self.organize_rules()
             elif choice == RulesMenu.SAVE_RULES:
-                self.rule_manager.save_rules()
+                self.rule_manager.updatePosts()
             elif choice == RulesMenu.RELOAD_RULES:
                 self.load_rules()
             elif choice == RulesMenu.BACK_TO_MAIN:
@@ -328,13 +333,18 @@ class EmailManager:
         """Explicitly re-loads rules from the file."""
         self._print_status("Reloading rules...")
         if self.rule_manager:
-            self.rule_manager = EmailRuleManager(self.rules_file)
+            self.rule_manager.setApiPosts()  # Reload rules using socialModules pattern
         self._print_status("Rules reloaded.")
 
-    def _apply_rule_logic(self, rule: Tuple | EmailRule, interactive: bool) -> None:
-        """The core logic for applying a single rule."""
-        # Handle both tuple and EmailRule formats
-        if isinstance(rule, EmailRule):
+    def _apply_rule_logic(self, rule: Tuple | EmailFilterRule, interactive: bool) -> None:
+        """The core logic for applying a single rule.
+        
+        Args:
+            rule: EmailFilterRule instance or tuple of (keyword, pattern, folder)
+            interactive: Whether to require user confirmation
+        """
+        # Handle both tuple and EmailFilterRule formats
+        if isinstance(rule, EmailFilterRule):
             keyword, text_header = rule.keyword, rule.pattern
             folder = rule.folder
         else:
@@ -368,7 +378,7 @@ class EmailManager:
         result = self.api_src.moveMails(self.api_src.getClient(), msg_list_str, folder)
         self._print_status(f"Move result: {result}")
 
-    def _select_rule(self) -> Optional[Tuple[EmailRule, str]]:
+    def _select_rule(self) -> Optional[Tuple[EmailFilterRule, str]]:
         """Interactively select a rule from the list.
 
         Returns:
@@ -614,7 +624,7 @@ def main():
                 manager.reconnect()
             elif choice == MainMenu.EXIT_SAVE:
                 if manager._confirm("Save rules before quitting"):
-                    manager.rule_manager.save_rules()
+                    manager.rule_manager.updatePosts()
                 manager._print_status("Exiting.")
                 break
             elif choice == MainMenu.EXIT_DISCARD:
