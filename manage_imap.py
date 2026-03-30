@@ -86,11 +86,11 @@ class EmailManager:
             The validated integer, or None if user entered 'q' to quit.
         """
         user_input = input(prompt).strip()
-        
+
         # Allow 'q' to quit
         if user_input.lower() == 'q':
             return None
-            
+
         try:
             value = int(user_input)
             if max_val is not None and not (min_val <= value <= max_val):
@@ -129,11 +129,12 @@ class EmailManager:
             rules.checkRules()
 
             self.api_src = rules.selectRuleInteractive("imap")
-            
+
             # Initialize filter manager using socialModules pattern
             self.rule_manager = moduleFilterManager()
-            self.rule_manager.user = "filter_manager"
+            #self.rule_manager.user = "filter_manager"
             self.rule_manager.rules_file = self.rules_file
+            print(f"User:    {self.rule_manager.user}")
             self.rule_manager.setApiPosts()  # Load rules
 
         except Exception as e:
@@ -338,7 +339,7 @@ class EmailManager:
 
     def _apply_rule_logic(self, rule: Tuple | EmailFilterRule, interactive: bool) -> None:
         """The core logic for applying a single rule.
-        
+
         Args:
             rule: EmailFilterRule instance or tuple of (keyword, pattern, folder)
             interactive: Whether to require user confirmation
@@ -601,7 +602,7 @@ def main():
     )
     args = parser.parse_args()
 
-    rules_file = args.rules_file or f"{DATADIR}/rulesSieve.dat"
+    rules_file = args.rules_file or f"{DATADIR}/rulesFilter.json"
 
     manager = EmailManager(rules_file=rules_file)
     try:
