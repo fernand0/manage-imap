@@ -9,7 +9,7 @@ dependencies = [
     "google-api-python-client",
     "oauth2client",
     "click",
-    "social-modules @ git+https://github.com/fernand0/socialModules.git@devel",
+    "social-modules @ git+https://github.com/fernand0/socialModules.git",
 ]
 
 [tool.setuptools]

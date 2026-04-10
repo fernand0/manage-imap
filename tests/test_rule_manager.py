@@ -246,3 +246,82 @@ class TestModuleFilterManager:
         captured = capsys.readouterr()
         assert "ALWAYS Rules:" in captured.out
         assert "test@test.com" in captured.out
+
+
+class TestImapFolderNoselect:
+    """Tests for IMAP folder \\Noselect attribute handling."""
+
+    def test_has_noselect_with_bytes(self):
+        """Test detection of \\Noselect attribute in bytes format."""
+        from socialModules.moduleImap import moduleImap
+        
+        imap_client = moduleImap()
+        
+        # Folder with \Noselect attribute
+        noselect_folder = b'(\\HasNoChildren \\Noselect) "/" "Special Folder"'
+        assert imap_client.has_noselect(noselect_folder) is True
+        
+        # Normal folder without \Noselect
+        normal_folder = b'(\\HasNoChildren) "/" "INBOX"'
+        assert imap_client.has_noselect(normal_folder) is False
+
+    def test_has_noselect_with_string(self):
+        """Test detection of \\Noselect attribute in string format."""
+        from socialModules.moduleImap import moduleImap
+        
+        imap_client = moduleImap()
+        
+        # Folder with \Noselect attribute
+        noselect_folder = '(\\HasNoChildren \\Noselect) "/" "Special Folder"'
+        assert imap_client.has_noselect(noselect_folder) is True
+        
+        # Normal folder without \Noselect
+        normal_folder = '(\\HasNoChildren) "/" "INBOX"'
+        assert imap_client.has_noselect(normal_folder) is False
+
+    def test_has_noselect_edge_cases(self):
+        """Test edge cases for \\Noselect detection."""
+        from socialModules.moduleImap import moduleImap
+        
+        imap_client = moduleImap()
+        
+        # Empty folder
+        assert imap_client.has_noselect(b'') is False
+        assert imap_client.has_noselect('') is False
+        
+        # Folder name containing 'Noselect' but not as attribute
+        folder_with_name = b'() "/" "MyNoselectFolder"'
+        assert imap_client.has_noselect(folder_with_name) is False
+        
+        # Multiple attributes including \Noselect
+        multi_attr = b'(\\HasChildren \\Noselect \\Marked) "/" "Parent"'
+        assert imap_client.has_noselect(multi_attr) is True
+
+    def test_list_folders_filters_noselect(self):
+        """Test that listFolders filters out \\Noselect folders."""
+        from socialModules.moduleImap import moduleImap
+        from unittest.mock import Mock, patch
+        
+        imap_client = moduleImap()
+        
+        # Mock the IMAP client and labels
+        mock_api = Mock()
+        imap_client._client = mock_api
+        
+        # Simulate raw IMAP LIST response
+        mock_folders = [
+            b'(\\HasNoChildren) "/" "INBOX"',
+            b'(\\HasNoChildren \\Noselect) "/" "Special"',
+            b'(\\HasChildren) "/" "Archive"',
+            b'(\\HasChildren \\Noselect) "/" "Root"',
+        ]
+        imap_client.labels = mock_folders
+        
+        # listFolders should filter out \Noselect folders
+        filtered = imap_client.listFolders()
+        
+        assert len(filtered) == 2
+        assert b'(\\HasNoChildren) "/" "INBOX"' in filtered
+        assert b'(\\HasChildren) "/" "Archive"' in filtered
+        assert b'(\\HasNoChildren \\Noselect) "/" "Special"' not in filtered
+        assert b'(\\HasChildren \\Noselect) "/" "Root"' not in filtered
