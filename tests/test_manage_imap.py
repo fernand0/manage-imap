@@ -86,3 +86,47 @@ class TestGetMessageChoice:
             result = manager._get_message_choice(posts)
         
         assert result is None
+
+
+class TestImapMoveMails:
+    """Tests for moveMails method in moduleImap."""
+
+    def test_move_mails_selects_channel_without_capitalize(self):
+        """Test that moveMails selects the channel without mangling its name."""
+        from socialModules.moduleImap import moduleImap
+
+        imap = moduleImap()
+        imap.channel = "INBOX"
+        imap.user = "test@test.com"
+        imap.server = "imap.test.com"
+
+        mock_client = Mock()
+        mock_client.select.return_value = ("OK", None)
+        mock_client.copy.return_value = ("OK", None)
+        mock_client.store.return_value = ("OK", None)
+
+        imap.moveMails(mock_client, "1,2,3", "Archive")
+
+        # Verify select was called with the exact channel name, not capitalized
+        mock_client.select.assert_called_once_with("INBOX")
+        assert mock_client.select.call_args[0][0] == "INBOX"
+        # Ensure capitalize was NOT used
+        assert mock_client.select.call_args[0][0] != "Inbox"
+
+    def test_move_mails_preserves_folder_hierarchy(self):
+        """Test that nested folder names like INBOX.sub.folder are preserved."""
+        from socialModules.moduleImap import moduleImap
+
+        imap = moduleImap()
+        imap.channel = "INBOX.sub.folder"
+        imap.user = "test@test.com"
+        imap.server = "imap.test.com"
+
+        mock_client = Mock()
+        mock_client.select.return_value = ("OK", None)
+        mock_client.copy.return_value = ("OK", None)
+        mock_client.store.return_value = ("OK", None)
+
+        imap.moveMails(mock_client, "1", "Dest")
+
+        mock_client.select.assert_called_once_with("INBOX.sub.folder")
