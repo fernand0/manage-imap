@@ -1180,7 +1180,7 @@ requires-dist = [
     { name = "oauth2client" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0.0" },
-    { name = "social-modules", git = "https://github.com/fernand0/socialModules.git" },
+    { name = "social-modules", git = "https://github.com/fernand0/socialModules.git?rev=devel" },
 ]
 
 [[package]]
@@ -2036,7 +2036,7 @@ wheels = [
 [[package]]
 name = "social-modules"
 version = "0.3.0"
-source = { git = "https://github.com/fernand0/socialModules.git#17ff5d42316c3e2f515e1459ae1e4ef3595d871c" }
+source = { git = "https://github.com/fernand0/socialModules.git?rev=devel#e62830fa5f0e16e1f870b3a9dc889e631bd7ecda" }
 dependencies = [
     { name = "aiohttp" },
     { name = "atproto" },
