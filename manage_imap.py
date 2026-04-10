@@ -242,7 +242,8 @@ class EmailManager:
 
     def _get_message_choice(self, posts: List[Any]) -> Optional[Any]:
         """Get message selection from user."""
-        max_msg = len(posts[-RECENT_MESSAGES_LIMIT:]) - 1
+        recent_posts = posts[-RECENT_MESSAGES_LIMIT:]
+        max_msg = len(recent_posts) - 1
         while True:
             msg_num = self._get_int_input(
                 f"Select message number (0-{max_msg}) or 'q' to quit: ",
@@ -253,7 +254,7 @@ class EmailManager:
             if msg_num is None:  # User typed 'q'
                 return None
             if msg_num >= 0:  # Valid number
-                return posts[-(RECENT_MESSAGES_LIMIT - msg_num)]
+                return recent_posts[msg_num]
             # msg_num == -1 means invalid input, loop continues
 
     def select_message(self) -> Optional[Any]:
