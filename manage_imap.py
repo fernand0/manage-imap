@@ -338,25 +338,17 @@ class EmailManager:
             self.rule_manager.setApiPosts()  # Reload rules using socialModules pattern
         self._print_status("Rules reloaded.")
 
-    def _construct_search_criteria(self, keyword: str, pattern: str) -> str:
-        """Construct a valid IMAP search criteria string.
+    def _construct_search_criteria(self, keyword: str, pattern: str) -> List[str]:
+        """Construct valid IMAP search criteria tokens.
 
         Args:
             keyword: The search key (e.g., 'From', 'Subject', 'BODY')
             pattern: The pattern to match
 
         Returns:
-            A string formatted for IMAP SEARCH command
+            A list of strings to be passed as arguments to the IMAP SEARCH command
         """
-        # Escape double quotes in the pattern for IMAP protocol compliance
-        safe_pattern = pattern.replace('"', '\\"')
         keyword_upper = keyword.upper()
-
-        # Mapping of common header-like keywords to standard IMAP search keys
-        # RFC 3501 Section 6.4.4
-        standard_keys = {"FROM", "TO", "SUBJECT", "CC", "BCC", "BODY", "TEXT"}
-        if keyword_upper in standard_keys:
-            return f'({keyword_upper} "{safe_pattern}")'
 
         # Handle special flags that don't take an argument
         flags = {
@@ -365,10 +357,17 @@ class EmailManager:
             "UNDRAFT", "UNFLAGGED", "UNSEEN"
         }
         if keyword_upper in flags:
-            return f'({keyword_upper})'
+            return [keyword_upper]
+
+        # Mapping of common header-like keywords to standard IMAP search keys
+        # RFC 3501 Section 6.4.4
+        standard_keys = {"FROM", "TO", "SUBJECT", "CC", "BCC", "BODY", "TEXT"}
+        
+        if keyword_upper in standard_keys:
+            return [keyword_upper, pattern]
 
         # Default to HEADER search for anything else
-        return f'(HEADER {keyword} "{safe_pattern}")'
+        return ["HEADER", keyword, pattern]
 
     def _apply_rule_logic(self, rule: Tuple | EmailFilterRule, interactive: bool) -> None:
         """The core logic for applying a single rule.
@@ -384,22 +383,26 @@ class EmailManager:
         else:
             keyword, pattern, folder = rule
 
-        search_criteria = self._construct_search_criteria(keyword, pattern)
+        search_tokens = self._construct_search_criteria(keyword, pattern)
         logger.info(
-            f"Applying rule: moving messages matching '{search_criteria}' to '{folder}'"
+            f"Applying rule: moving messages matching tokens {search_tokens} to '{folder}'"
         )
 
         try:
             self.api_src.setPosts()
-            status, msg_ids = self.api_src.getClient().search(None, search_criteria)
+            # Pass tokens as separate arguments. imaplib will handle quoting if necessary 
+            # or we can pass the fully formatted string. Most IMAP clients join with spaces.
+            status, msg_ids = self.api_src.getClient().search(None, *search_tokens)
             if status != "OK":
                 raise ValueError(f"Search failed with status: {status}")
         except Exception as e:
             logger.debug(f"Initial search failed ({e}), retrying with UTF-8...")
             try:
                 # Some servers require charset and encoded bytes for non-ASCII
+                # When using charset, we often need to join tokens into a single encoded string
+                search_str = " ".join(f'"{t}"' if " " in t else t for t in search_tokens)
                 status, msg_ids = self.api_src.getClient().search(
-                    "utf-8", search_criteria.encode("utf-8")
+                    "utf-8", search_str.encode("utf-8")
                 )
             except Exception as e2:
                 logger.error(f"Search execution failed: {e2}")
