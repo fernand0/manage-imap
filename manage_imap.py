@@ -349,6 +349,8 @@ class EmailManager:
             A list of strings to be passed as arguments to the IMAP SEARCH command
         """
         keyword_upper = keyword.upper()
+        # Escape double quotes and wrap in quotes for IMAP compliance
+        safe_pattern = f'"{pattern.replace(chr(34), chr(92) + chr(34))}"'
 
         # Handle special flags that don't take an argument
         flags = {
@@ -364,10 +366,10 @@ class EmailManager:
         standard_keys = {"FROM", "TO", "SUBJECT", "CC", "BCC", "BODY", "TEXT"}
         
         if keyword_upper in standard_keys:
-            return [keyword_upper, pattern]
+            return [keyword_upper, safe_pattern]
 
         # Default to HEADER search for anything else
-        return ["HEADER", keyword, pattern]
+        return ["HEADER", keyword, safe_pattern]
 
     def _apply_rule_logic(self, rule: Tuple | EmailFilterRule, interactive: bool) -> None:
         """The core logic for applying a single rule.
