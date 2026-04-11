@@ -338,6 +338,38 @@ class EmailManager:
             self.rule_manager.setApiPosts()  # Reload rules using socialModules pattern
         self._print_status("Rules reloaded.")
 
+    def _construct_search_criteria(self, keyword: str, pattern: str) -> str:
+        """Construct a valid IMAP search criteria string.
+
+        Args:
+            keyword: The search key (e.g., 'From', 'Subject', 'BODY')
+            pattern: The pattern to match
+
+        Returns:
+            A string formatted for IMAP SEARCH command
+        """
+        # Escape double quotes in the pattern for IMAP protocol compliance
+        safe_pattern = pattern.replace('"', '\\"')
+        keyword_upper = keyword.upper()
+
+        # Mapping of common header-like keywords to standard IMAP search keys
+        # RFC 3501 Section 6.4.4
+        standard_keys = {"FROM", "TO", "SUBJECT", "CC", "BCC", "BODY", "TEXT"}
+        if keyword_upper in standard_keys:
+            return f'({keyword_upper} "{safe_pattern}")'
+
+        # Handle special flags that don't take an argument
+        flags = {
+            "ALL", "ANSWERED", "DELETED", "DRAFT", "FLAGGED", "NEW",
+            "OLD", "RECENT", "SEEN", "UNANSWERED", "UNDELETED",
+            "UNDRAFT", "UNFLAGGED", "UNSEEN"
+        }
+        if keyword_upper in flags:
+            return f'({keyword_upper})'
+
+        # Default to HEADER search for anything else
+        return f'(HEADER {keyword} "{safe_pattern}")'
+
     def _apply_rule_logic(self, rule: Tuple | EmailFilterRule, interactive: bool) -> None:
         """The core logic for applying a single rule.
 
@@ -347,23 +379,32 @@ class EmailManager:
         """
         # Handle both tuple and EmailFilterRule formats
         if isinstance(rule, EmailFilterRule):
-            keyword, text_header = rule.keyword, rule.pattern
+            keyword, pattern = rule.keyword, rule.pattern
             folder = rule.folder
         else:
-            keyword, text_header, folder = rule
+            keyword, pattern, folder = rule
 
-        search_criteria = f'(HEADER {keyword} "{text_header}")'
+        search_criteria = self._construct_search_criteria(keyword, pattern)
         logger.info(
             f"Applying rule: moving messages matching '{search_criteria}' to '{folder}'"
         )
 
         try:
             self.api_src.setPosts()
-            _, msg_ids = self.api_src.getClient().search(None, search_criteria)
-        except Exception:
-            _, msg_ids = self.api_src.getClient().search(
-                "utf-8", search_criteria.encode("utf-8")
-            )
+            status, msg_ids = self.api_src.getClient().search(None, search_criteria)
+            if status != "OK":
+                raise ValueError(f"Search failed with status: {status}")
+        except Exception as e:
+            logger.debug(f"Initial search failed ({e}), retrying with UTF-8...")
+            try:
+                # Some servers require charset and encoded bytes for non-ASCII
+                status, msg_ids = self.api_src.getClient().search(
+                    "utf-8", search_criteria.encode("utf-8")
+                )
+            except Exception as e2:
+                logger.error(f"Search execution failed: {e2}")
+                self._print_status(f"Error searching messages: {e2}")
+                return
 
         if not msg_ids or not msg_ids[0]:
             self._print_status("No messages found matching this rule.")
