@@ -60,7 +60,7 @@ class EmailManager:
 
     def __init__(self, rules_file: Optional[str] = None):
         self.api_src: Optional[Any] = None
-        self.rules_file = rules_file or f"{DATADIR}/rulesSieve.dat"
+        self.rules_file = rules_file or f"{DATADIR}/rulesFilter.json"
         self.rule_manager: Optional[moduleFilterManager] = None
 
     def _print_status(self, message: str) -> None:
