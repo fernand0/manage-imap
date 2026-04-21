@@ -134,6 +134,7 @@ class TestImapMoveMails:
         mock_client.select.assert_called_once_with("INBOX.sub.folder")
 
 
+<<<<<<< HEAD
 class TestEmailManagerMoveMessage:
     """Tests for the move_message method in EmailManager."""
 
@@ -263,3 +264,30 @@ class TestEmailManagerMoveMessage:
             mock_extract_folder_suggestion.assert_called_once_with('From', 'sender@example.com')
             mock_select_folder_n.assert_called_once_with(manager.api_src.getClient(), folderM="sender")
 
+
+class TestSearchConstruction:
+    """Tests for search criteria construction."""
+    @pytest.fixture
+    def manager(self):
+        return EmailManager()
+
+    def test_construct_standard_key_from(self, manager):
+        assert manager._construct_search_criteria("From", "test@example.com") == ["FROM", '"test@example.com"']
+
+    def test_construct_standard_key_subject(self, manager):
+        assert manager._construct_search_criteria("Subject", "Hello World") == ["SUBJECT", '"Hello World"']
+
+    def test_construct_standard_key_body(self, manager):
+        assert manager._construct_search_criteria("BODY", "secret code") == ["BODY", '"secret code"']
+
+    def test_construct_header_custom(self, manager):
+        assert manager._construct_search_criteria("X-Spam-Status", "Yes") == ["HEADER", "X-Spam-Status", '"Yes"']
+
+    def test_construct_header_list_id(self, manager):
+        assert manager._construct_search_criteria("List-Id", "cordial.1.13.sparkpostmail.com") == ["HEADER", "List-Id", '"cordial.1.13.sparkpostmail.com"']
+
+    def test_construct_flag_unseen(self, manager):
+        assert manager._construct_search_criteria("UNSEEN", "") == ["UNSEEN"]
+
+    def test_construct_case_insensitivity(self, manager):
+        assert manager._construct_search_criteria("from", "test") == ["FROM", '"test"']

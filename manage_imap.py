@@ -60,7 +60,7 @@ class EmailManager:
 
     def __init__(self, rules_file: Optional[str] = None):
         self.api_src: Optional[Any] = None
-        self.rules_file = rules_file or f"{DATADIR}/rulesSieve.dat"
+        self.rules_file = rules_file or f"{DATADIR}/rulesFilter.json"
         self.rule_manager: Optional[moduleFilterManager] = None
 
     def _print_status(self, message: str) -> None:
@@ -383,6 +383,39 @@ class EmailManager:
             self.rule_manager.setApiPosts()  # Reload rules using socialModules pattern
         self._print_status("Rules reloaded.")
 
+    def _construct_search_criteria(self, keyword: str, pattern: str) -> List[str]:
+        """Construct valid IMAP search criteria tokens.
+
+        Args:
+            keyword: The search key (e.g., 'From', 'Subject', 'BODY')
+            pattern: The pattern to match
+
+        Returns:
+            A list of strings to be passed as arguments to the IMAP SEARCH command
+        """
+        keyword_upper = keyword.upper()
+        # Escape double quotes and wrap in quotes for IMAP compliance
+        safe_pattern = f'"{pattern.replace(chr(34), chr(92) + chr(34))}"'
+
+        # Handle special flags that don't take an argument
+        flags = {
+            "ALL", "ANSWERED", "DELETED", "DRAFT", "FLAGGED", "NEW",
+            "OLD", "RECENT", "SEEN", "UNANSWERED", "UNDELETED",
+            "UNDRAFT", "UNFLAGGED", "UNSEEN"
+        }
+        if keyword_upper in flags:
+            return [keyword_upper]
+
+        # Mapping of common header-like keywords to standard IMAP search keys
+        # RFC 3501 Section 6.4.4
+        standard_keys = {"FROM", "TO", "SUBJECT", "CC", "BCC", "BODY", "TEXT"}
+        
+        if keyword_upper in standard_keys:
+            return [keyword_upper, safe_pattern]
+
+        # Default to HEADER search for anything else
+        return ["HEADER", keyword, safe_pattern]
+
     def _apply_rule_logic(self, rule: Tuple | EmailFilterRule, interactive: bool) -> None:
         """The core logic for applying a single rule.
 
@@ -392,23 +425,36 @@ class EmailManager:
         """
         # Handle both tuple and EmailFilterRule formats
         if isinstance(rule, EmailFilterRule):
-            keyword, text_header = rule.keyword, rule.pattern
+            keyword, pattern = rule.keyword, rule.pattern
             folder = rule.folder
         else:
-            keyword, text_header, folder = rule
+            keyword, pattern, folder = rule
 
-        search_criteria = f'(HEADER {keyword} "{text_header}")'
+        search_tokens = self._construct_search_criteria(keyword, pattern)
         logger.info(
-            f"Applying rule: moving messages matching '{search_criteria}' to '{folder}'"
+            f"Applying rule: moving messages matching tokens {search_tokens} to '{folder}'"
         )
 
         try:
             self.api_src.setPosts()
-            _, msg_ids = self.api_src.getClient().search(None, search_criteria)
-        except Exception:
-            _, msg_ids = self.api_src.getClient().search(
-                "utf-8", search_criteria.encode("utf-8")
-            )
+            # Pass tokens as separate arguments. imaplib will handle quoting if necessary 
+            # or we can pass the fully formatted string. Most IMAP clients join with spaces.
+            status, msg_ids = self.api_src.getClient().search(None, *search_tokens)
+            if status != "OK":
+                raise ValueError(f"Search failed with status: {status}")
+        except Exception as e:
+            logger.debug(f"Initial search failed ({e}), retrying with UTF-8...")
+            try:
+                # Some servers require charset and encoded bytes for non-ASCII
+                # When using charset, we often need to join tokens into a single encoded string
+                search_str = " ".join(f'"{t}"' if " " in t else t for t in search_tokens)
+                status, msg_ids = self.api_src.getClient().search(
+                    "utf-8", search_str.encode("utf-8")
+                )
+            except Exception as e2:
+                logger.error(f"Search execution failed: {e2}")
+                self._print_status(f"Error searching messages: {e2}")
+                return
 
         if not msg_ids or not msg_ids[0]:
             self._print_status("No messages found matching this rule.")
