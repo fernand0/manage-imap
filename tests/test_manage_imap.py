@@ -6,10 +6,12 @@ import pytest
 from unittest.mock import Mock, patch
 
 from manage_imap import EmailManager, RECENT_MESSAGES_LIMIT
+from socialModules.moduleFilterManager import EmailFilterRule, moduleFilterManager
 
 
 class TestGetMessageChoice:
     """Tests for _get_message_choice method."""
+
 
     @pytest.fixture
     def manager(self):
@@ -130,3 +132,134 @@ class TestImapMoveMails:
         imap.moveMails(mock_client, "1", "Dest")
 
         mock_client.select.assert_called_once_with("INBOX.sub.folder")
+
+
+class TestEmailManagerMoveMessage:
+    """Tests for the move_message method in EmailManager."""
+
+    @pytest.fixture
+    def manager_with_mocks(self):
+        """Fixture to set up EmailManager with necessary mocks."""
+        manager = EmailManager()
+
+        # Mock api_src (moduleImap)
+        manager.api_src = Mock()
+        manager.api_src.setPosts.return_value = None
+        manager.api_src.getPosts.return_value = ["msg_1"]
+        manager.api_src.getPostFrom.return_value = "sender@example.com"
+        manager.api_src.getPostTitle.return_value = "Test Subject"
+        manager.api_src.selectHeaderAuto.return_value = (
+            "From", "dummy_text", "sender@example.com"
+        )
+        manager.api_src.getClient.return_value = Mock()
+        manager.api_src.moveMails.return_value = "OK"
+
+        # Mock rule_manager (moduleFilterManager)
+        manager.rule_manager = Mock(spec=moduleFilterManager)
+        manager.rule_manager.rules = {"always": [], "sometimes": []}
+        manager.rule_manager.display_rules.return_value = None
+
+        return manager
+
+    def test_move_message_applies_suggested_rule(self, manager_with_mocks):
+        """
+        Test that move_message correctly identifies and applies a suggested rule
+        when user confirms.
+        """
+        manager = manager_with_mocks
+        
+        # Add a matching rule to the manager
+        matching_rule = EmailFilterRule(
+            keyword="From", pattern="sender@example.com", folder="MatchedFolder"
+        )
+        manager.rule_manager.rules["always"].append(matching_rule)
+
+        # Mock user inputs:
+        # 1. Select message (0)
+        # 2. Select rule to apply (0)
+        # 3. Confirm applying the rule (True)
+        with patch.object(manager, '_get_int_input', side_effect=[0, 0]), \
+             patch.object(manager, '_confirm', return_value=True), \
+             patch.object(manager, '_apply_rule_logic') as mock_apply_rule_logic, \
+             patch.object(manager, '_extract_folder_suggestion') as mock_extract_folder_suggestion, \
+             patch.object(manager.api_src, 'selectFolderN') as mock_select_folder_n:
+
+            manager.move_message()
+
+            # Assertions
+            mock_apply_rule_logic.assert_called_once_with(matching_rule, interactive=True)
+            
+            # Ensure no further steps in the original move_message flow were executed
+            mock_extract_folder_suggestion.assert_not_called()
+            mock_select_folder_n.assert_not_called()
+
+    def test_move_message_skips_suggested_rule_on_user_cancel(self, manager_with_mocks):
+        """
+        Test that move_message proceeds to folder suggestion if user cancels
+        applying a suggested rule.
+        """
+        manager = manager_with_mocks
+
+        # Add a matching rule
+        matching_rule = EmailFilterRule(
+            keyword="From", pattern="sender@example.com", folder="MatchedFolder"
+        )
+        manager.rule_manager.rules["always"].append(matching_rule)
+
+        # Mock user inputs:
+        # 1. Select message (0)
+        # 2. Select rule to apply (0)
+        # 3. Cancel applying the rule (False for first _confirm call)
+        # 4. Confirm applying the newly created rule (True for second _confirm call)
+        with patch.object(manager, '_get_int_input', side_effect=[0, 0, 0]), \
+             patch.object(manager, '_confirm', side_effect=[False, True]), \
+             patch.object(manager, '_apply_rule_logic') as mock_apply_rule_logic, \
+             patch.object(manager, '_extract_folder_suggestion', return_value="sender") as mock_extract_folder_suggestion, \
+             patch.object(manager.api_src, 'selectFolderN', return_value="SelectedFolder") as mock_select_folder_n:
+
+            manager.move_message()
+
+            # Assertions
+            # _apply_rule_logic should NOT be called with the suggested rule
+            mock_apply_rule_logic.assert_called_once()
+            # It should be called with the rule created from the later flow
+            assert mock_apply_rule_logic.call_args[0][0] == ('From', 'sender@example.com', 'SelectedFolder')
+            
+            # Ensure original flow continues
+            mock_extract_folder_suggestion.assert_called_once_with('From', 'sender@example.com')
+            mock_select_folder_n.assert_called_once_with(manager.api_src.getClient(), folderM="sender")
+
+    def test_move_message_skips_suggested_rule_on_user_skip(self, manager_with_mocks):
+        """
+        Test that move_message proceeds to folder suggestion if user skips
+        suggested rules.
+        """
+        manager = manager_with_mocks
+
+        # Add a matching rule
+        matching_rule = EmailFilterRule(
+            keyword="From", pattern="sender@example.com", folder="MatchedFolder"
+        )
+        manager.rule_manager.rules["always"].append(matching_rule)
+
+        # Mock user inputs:
+        # 1. Select message (0)
+        # 2. Skip rule application ('q' which is None)
+        # 3. Choose rule type 'a' (0 for _get_int_input)
+        with patch.object(manager, '_get_int_input', side_effect=[0, None, 0]), \
+             patch.object(manager, '_confirm', return_value=True), \
+             patch.object(manager, '_apply_rule_logic') as mock_apply_rule_logic, \
+             patch.object(manager, '_extract_folder_suggestion', return_value="sender") as mock_extract_folder_suggestion, \
+             patch.object(manager.api_src, 'selectFolderN', return_value="SelectedFolder") as mock_select_folder_n:
+
+            manager.move_message()
+
+            # Assertions
+            mock_apply_rule_logic.assert_called_once()
+            # It should be called with the rule created from the later flow
+            assert mock_apply_rule_logic.call_args[0][0] == ('From', 'sender@example.com', 'SelectedFolder')
+            
+            # Ensure original flow continues
+            mock_extract_folder_suggestion.assert_called_once_with('From', 'sender@example.com')
+            mock_select_folder_n.assert_called_once_with(manager.api_src.getClient(), folderM="sender")
+

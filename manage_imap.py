@@ -104,6 +104,28 @@ class EmailManager:
             print(error_msg)
             return -1  # Signal to retry
 
+    def _check_for_matching_rules(self, header_keyword: str, header_text: str) -> List[EmailFilterRule]:
+        """
+        Checks if any existing rules match the given header keyword and text.
+
+        Args:
+            header_keyword: The keyword of the email header (e.g., "From", "Subject").
+            header_text: The content of the email header.
+
+        Returns:
+            A list of matching EmailFilterRule objects.
+        """
+        matching_rules: List[EmailFilterRule] = []
+        if not self.rule_manager or not self.rule_manager.rules:
+            return matching_rules
+
+        for category in ["always", "sometimes"]:
+            for rule in self.rule_manager.rules.get(category, []):
+                # Check if keyword matches and pattern matches text_header
+                if rule.keyword.lower() == header_keyword.lower() and rule.matches(header_text):
+                    matching_rules.append(rule)
+        return matching_rules
+
     def _confirm(self, message: str, default: bool = False) -> bool:
         """Get yes/no confirmation from user.
 
@@ -307,6 +329,29 @@ class EmailManager:
                 self.api_src, msg
             )
             logger.info(f"Rule based on: Header='{keyword}', Content='{text_header}'")
+
+            # --- New: Check for existing rules and offer to apply ---
+            matching_rules = self._check_for_matching_rules(keyword, text_header)
+            if matching_rules:
+                self._print_status("\nFound existing rules that match this message:")
+                for i, rule in enumerate(matching_rules):
+                    self._print_status(f"  {i}: Move '{rule.keyword}' matching '{rule.pattern}' to '{rule.folder}'")
+
+                apply_choice = self._get_int_input(
+                    f"Enter the number of the rule to apply (0-{len(matching_rules) - 1}), or 'q' to skip: ",
+                    min_val=0,
+                    max_val=len(matching_rules) - 1,
+                    error_msg="Invalid choice. Please enter a number or 'q'."
+                )
+
+                if apply_choice is not None and apply_choice != -1:
+                    chosen_rule = matching_rules[apply_choice]
+                    if self._confirm(f"Apply rule: Move '{chosen_rule.keyword}' matching '{chosen_rule.pattern}' to '{chosen_rule.folder}'?"):
+                        self._apply_rule_logic(chosen_rule, interactive=True)
+                        return # Exit after applying the chosen rule
+                    else:
+                        self._print_status("Application of suggested rule cancelled.")
+            # --- End New ---
 
             folder_suggestion = self._extract_folder_suggestion(keyword, text_header)
             folder = self.api_src.selectFolderN(
