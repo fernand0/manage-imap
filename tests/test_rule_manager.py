@@ -304,10 +304,6 @@ class TestImapFolderNoselect:
         
         imap_client = moduleImap()
         
-        # Mock the IMAP client and labels
-        mock_api = Mock()
-        imap_client._client = mock_api
-        
         # Simulate raw IMAP LIST response
         mock_folders = [
             b'(\\HasNoChildren) "/" "INBOX"',
@@ -315,6 +311,12 @@ class TestImapFolderNoselect:
             b'(\\HasChildren) "/" "Archive"',
             b'(\\HasChildren \\Noselect) "/" "Root"',
         ]
+
+        # Mock the IMAP client and labels
+        mock_api = Mock()
+        mock_api.list.return_value = ("OK", mock_folders)
+        imap_client.client = mock_api
+        
         imap_client.labels = mock_folders
         
         # listFolders should filter out \Noselect folders
