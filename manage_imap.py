@@ -446,8 +446,9 @@ class EmailManager:
             logger.debug(f"Initial search failed ({e}), retrying with UTF-8...")
             try:
                 # Some servers require charset and encoded bytes for non-ASCII
-                # When using charset, we often need to join tokens into a single encoded string
-                search_str = " ".join(f'"{t}"' if " " in t else t for t in search_tokens)
+                # When using charset, the search command often expects the query
+                # as a single encoded string.
+                search_str = " ".join(search_tokens) # Join tokens without adding extra quotes
                 status, msg_ids = self.api_src.getClient().search(
                     "utf-8", search_str.encode("utf-8")
                 )
