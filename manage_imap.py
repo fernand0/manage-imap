@@ -12,6 +12,11 @@ import re
 import sys
 from enum import IntEnum
 from typing import List, Tuple, Optional, Any
+import click
+
+# Disable pager if output is not a terminal to avoid I/O errors
+if not sys.stdout.isatty():
+    click.echo_via_pager = click.echo
 
 # Constants
 MENU_SEPARATOR_WIDTH = 50
