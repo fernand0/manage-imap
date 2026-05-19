@@ -8,6 +8,7 @@ organization and automated folder management.
 
 import argparse
 import logging
+import re
 import sys
 from enum import IntEnum
 from typing import List, Tuple, Optional, Any
@@ -266,7 +267,10 @@ class EmailManager:
         """Get message selection from user."""
         recent_posts = posts[-RECENT_MESSAGES_LIMIT:]
         max_msg = len(recent_posts) - 1
-        while True:
+        choice = None
+        valid_input = False
+
+        while not valid_input:
             msg_num = self._get_int_input(
                 f"Select message number (0-{max_msg}) or 'q' to quit: ",
                 min_val=0,
@@ -274,13 +278,18 @@ class EmailManager:
                 error_msg="Please enter a valid number or 'q'.",
             )
             if msg_num is None:  # User typed 'q'
-                return None
-            if msg_num >= 0:  # Valid number
-                return recent_posts[msg_num]
+                choice = None
+                valid_input = True
+            elif msg_num >= 0:  # Valid number
+                choice = recent_posts[msg_num]
+                valid_input = True
             # msg_num == -1 means invalid input, loop continues
+
+        return choice
 
     def select_message(self) -> Optional[Any]:
         """Select a message from the current folder."""
+        selected_msg = None
         try:
             self.api_src.setPosts()
             posts = self.api_src.getPosts()
@@ -289,34 +298,69 @@ class EmailManager:
                 self._print_status(
                     f"No messages found in current folder: {self.api_src.getChannel()}"
                 )
-                return None
-
-            self._display_recent_messages(posts)
-            return self._get_message_choice(posts)
+            else:
+                self._display_recent_messages(posts)
+                selected_msg = self._get_message_choice(posts)
 
         except Exception as e:
             logger.exception("Error selecting message")
 
+        return selected_msg
+
     def _extract_folder_suggestion(self, keyword: str, text_header: str) -> str:
         """Extract a folder suggestion from the header content."""
-        if "Subject" not in keyword and "@" in text_header:
-            domain = text_header.split("@")[1]
-            return next(
-                (part for part in domain.split(".") if part != "www"), text_header
-            )
-        return text_header
+        suggestion = text_header.strip()
+
+        # If it's a Subject, try to find bracketed content (e.g., [ProjectName])
+        if "Subject" in keyword:
+            match = re.search(r"\[([^\]]+)\]", suggestion)
+            if match:
+                suggestion = match.group(1)
+        # For other headers, especially those containing email addresses or IDs
+        else:
+            # Handle "Name <email@domain.com>" or "<id@domain.com>"
+            target = suggestion
+            if "<" in suggestion and ">" in suggestion:
+                target = suggestion.split("<")[1].split(">")[0]
+
+            # If it contains an email address, focus on the domain part
+            if "@" in target:
+                target = target.split("@")[1]
+
+            # Extract the first meaningful part of the domain/ID
+            # (ignoring 'www' and empty parts)
+            parts = [
+                p.strip()
+                for p in target.split(".")
+                if p.strip().lower() != "www" and p.strip()
+            ]
+            if parts:
+                suggestion = parts[0]
+
+        return suggestion
 
     def _get_rule_type_from_user(self) -> Optional[str]:
         """Get rule type (always/sometimes) from user."""
-        while True:
-            rule_type = input("Make rule (a)lways or (s)ometimes? (or 'q' to quit): ").lower()
+        result = None
+        valid_choice = False
+        while not valid_choice:
+            rule_type = input(
+                "Make rule (a)lways or (s)ometimes? (or 'q' to quit): "
+            ).lower()
             if rule_type == "q":
-                return None
-            if rule_type == "a":
-                return "always"
-            if rule_type == "s":
-                return "sometimes"
-            print("Invalid option. Please enter 'a' for always, 's' for sometimes, or 'q' to quit.")
+                result = None
+                valid_choice = True
+            elif rule_type == "a":
+                result = "always"
+                valid_choice = True
+            elif rule_type == "s":
+                result = "sometimes"
+                valid_choice = True
+            else:
+                print(
+                    "Invalid option. Please enter 'a' for always, 's' for sometimes, or 'q' to quit."
+                )
+        return result
 
     def move_message(self, create_rule: bool = False) -> None:
         """Selects a message, moves it to a folder, and optionally creates a rule."""
@@ -361,6 +405,8 @@ class EmailManager:
                 logger.warning("No folder selected. Aborting.")
                 return
 
+            # Normalize folder path for rule creation and application
+            folder = self._normalize_folder_path(folder)
             new_rule = (keyword, text_header, folder)
             self._apply_rule_logic(new_rule, interactive=True)
 
@@ -416,6 +462,14 @@ class EmailManager:
         # Default to HEADER search for anything else
         return ["HEADER", keyword, safe_pattern]
 
+    def _normalize_folder_path(self, folder: str) -> str:
+        """Normalize folder path using the IMAP separator."""
+        if self.api_src and hasattr(self.api_src, "separator") and self.api_src.separator:
+            sep = self.api_src.separator
+            # Replace common separators (. and /) with the correct one
+            return folder.replace(".", sep).replace("/", sep)
+        return folder
+
     def _apply_rule_logic(self, rule: Tuple | EmailFilterRule, interactive: bool) -> None:
         """The core logic for applying a single rule.
 
@@ -429,6 +483,9 @@ class EmailManager:
             folder = rule.folder
         else:
             keyword, pattern, folder = rule
+
+        # Normalize folder path using IMAP separator
+        folder = self._normalize_folder_path(folder)
 
         search_tokens = self._construct_search_criteria(keyword, pattern)
         logger.info(
