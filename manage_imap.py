@@ -610,8 +610,11 @@ class EmailManager:
         """Allows the user to select a different IMAP folder."""
         self._print_status("Fetching folder list...")
         try:
+            logger.debug("Calling api_src.selectFolder(None)")
             folder = self.api_src.selectFolder(None)
+            logger.debug(f"api_src.selectFolder returned: {folder}")
             if folder:
+                logger.debug(f"Attempting to set channel to: {folder}")
                 self.api_src.setChannel(folder)
                 logger.info(f"Switched to folder: {self.api_src.getChannel()}")
             else:
