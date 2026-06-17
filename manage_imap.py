@@ -36,12 +36,13 @@ class MainMenu(IntEnum):
     """Main menu options."""
     PURGE_DELETED = 0
     MOVE_MAIL = 1
-    CHANGE_FOLDER = 2
-    LIST_UNREAD = 3
-    RULES_MANAGEMENT = 4
-    RECONNECT = 5
-    EXIT_SAVE = 6
-    EXIT_DISCARD = 7
+    COPY_MAIL = 2
+    CHANGE_FOLDER = 3
+    LIST_UNREAD = 4
+    RULES_MANAGEMENT = 5
+    RECONNECT = 6
+    EXIT_SAVE = 7
+    EXIT_DISCARD = 8
 
 
 class RulesMenu(IntEnum):
@@ -216,6 +217,7 @@ class EmailManager:
         menu_options = [
             "Purge deleted mails",
             "Move mail",
+            "Copy mail",
             "Change current folder",
             "List unread messages",
             "Rules Management...",
@@ -426,6 +428,103 @@ class EmailManager:
 
         except Exception as e:
             logger.exception("An error occurred while moving message")
+
+    def copy_message(self) -> None:
+        """Selects a message and copies it to a folder (locally or remotely)."""
+        try:
+            msg = self.select_message()
+            if not msg:
+                return
+
+            (keyword, textt, text_header) = self.api_src.selectHeaderAuto(
+                self.api_src, msg
+            )
+            logger.info(f"Copying based on: Header='{keyword}', Content='{text_header}'")
+
+            folder_suggestion = self._extract_folder_suggestion(keyword, text_header)
+            folder = self.api_src.selectFolderN(
+                self.api_src.getClient(), folderM=folder_suggestion
+            )
+            if not folder:
+                logger.warning("No folder selected. Aborting.")
+                return
+
+            # Normalize folder path if it's a local folder
+            if "@" not in folder:
+                folder = self._normalize_folder_path(folder)
+
+            search_tokens = self._construct_search_criteria(keyword, text_header)
+            self.api_src.setPosts()
+            try:
+                status, msg_ids = self.api_src.getClient().search(None, *search_tokens)
+                if status != "OK":
+                    raise ValueError(f"Search failed with status: {status}")
+            except Exception as e:
+                logger.debug(f"Initial search failed ({e}), retrying with UTF-8...")
+                try:
+                    search_str = " ".join(search_tokens)
+                    status, msg_ids = self.api_src.getClient().search(
+                        "utf-8", search_str.encode("utf-8")
+                    )
+                except Exception as e2:
+                    logger.error(f"Search execution failed: {e2}")
+                    self._print_status(f"Error searching messages: {e2}")
+                    return
+
+            if not msg_ids or not msg_ids[0]:
+                self._print_status("No messages found matching this rule.")
+                return
+
+            msg_list_str = msg_ids[0].decode("utf-8").replace(" ", ",")
+            msg_count = len(msg_list_str.split(","))
+            self._print_status(f"Found {msg_count} messages matching.")
+
+            if not self._confirm("Proceed with copying messages"):
+                self._print_status("Copy operation cancelled.")
+                return
+
+            if "@" in folder:
+                # Handle potential remote folder syntax like user@server/Folder or user@server:Folder
+                remote_account = folder
+                remote_folder = None
+
+                at_pos = folder.rfind("@")
+                for separator in ("/", ":"):
+                    sep_pos = folder.find(separator, at_pos)
+                    if sep_pos != -1:
+                        remote_account = folder[:sep_pos]
+                        remote_folder = folder[sep_pos + 1 :]
+                        break
+
+                self._print_status(f"Copying remotely to account '{remote_account}'...")
+                result = self.api_src.copyMailsRemote(
+                    self.api_src.getClient(), msg_list_str, remote_account, folder=remote_folder
+                )
+                self._print_status(f"Copy result: {result}")
+            else:
+                self._print_status(f"Copying locally to folder '{folder}'...")
+                msg_list = msg_list_str.split(",")
+                chunk_size = 500
+                success = True
+                for i in range(0, len(msg_list), chunk_size):
+                    chunk = msg_list[i : i + chunk_size]
+                    chunk_str = ",".join(chunk)
+                    try:
+                        status, result_msg = self.api_src.getClient().copy(chunk_str, folder)
+                        if status != "OK":
+                            logger.warning(f"Failed to copy chunk: {result_msg}")
+                            success = False
+                    except Exception as e:
+                        logger.error(f"Unexpected error during local copy: {e}")
+                        success = False
+
+                if success:
+                    self._print_status("Copy result: OK")
+                else:
+                    self._print_status("Copy result: Failed or partially failed")
+
+        except Exception as e:
+            logger.exception("An error occurred while copying message")
 
     def load_rules(self) -> None:
         """Explicitly re-loads rules from the file."""
@@ -773,6 +872,8 @@ def main():
                 manager.purge_deleted_mails()
             elif choice == MainMenu.MOVE_MAIL:
                 manager.move_message(create_rule=False)
+            elif choice == MainMenu.COPY_MAIL:
+                manager.copy_message()
             elif choice == MainMenu.CHANGE_FOLDER:
                 manager.change_folder()
             elif choice == MainMenu.LIST_UNREAD:

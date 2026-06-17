@@ -134,7 +134,6 @@ class TestImapMoveMails:
         mock_client.select.assert_called_once_with("INBOX.sub.folder")
 
 
-<<<<<<< HEAD
 class TestEmailManagerMoveMessage:
     """Tests for the move_message method in EmailManager."""
 
@@ -154,6 +153,7 @@ class TestEmailManagerMoveMessage:
         )
         manager.api_src.getClient.return_value = Mock()
         manager.api_src.moveMails.return_value = "OK"
+        manager.api_src.separator = "."
 
         # Mock rule_manager (moduleFilterManager)
         manager.rule_manager = Mock(spec=moduleFilterManager)
@@ -263,6 +263,79 @@ class TestEmailManagerMoveMessage:
             # Ensure original flow continues
             mock_extract_folder_suggestion.assert_called_once_with('From', 'sender@example.com')
             mock_select_folder_n.assert_called_once_with(manager.api_src.getClient(), folderM="sender")
+
+
+class TestEmailManagerCopyMessage:
+    """Tests for the copy_message method in EmailManager."""
+
+    @pytest.fixture
+    def manager_with_mocks(self):
+        """Fixture to set up EmailManager with necessary mocks."""
+        manager = EmailManager()
+
+        # Mock api_src (moduleImap)
+        manager.api_src = Mock()
+        manager.api_src.setPosts.return_value = None
+        manager.api_src.getPosts.return_value = ["msg_1"]
+        manager.api_src.getPostFrom.return_value = "sender@example.com"
+        manager.api_src.getPostTitle.return_value = "Test Subject"
+        manager.api_src.selectHeaderAuto.return_value = (
+            "From", "dummy_text", "sender@example.com"
+        )
+        mock_client = Mock()
+        mock_client.search.return_value = ("OK", [b"1 2"])
+        mock_client.copy.return_value = ("OK", None)
+        manager.api_src.getClient.return_value = mock_client
+        manager.api_src.copyMailsRemote.return_value = "OK"
+        manager.api_src.separator = "."
+
+        return manager
+
+    def test_copy_message_local(self, manager_with_mocks):
+        """Test copying messages locally."""
+        manager = manager_with_mocks
+
+        with patch.object(manager, 'select_message', return_value="msg_1"), \
+             patch.object(manager.api_src, 'selectFolderN', return_value="LocalFolder"), \
+             patch.object(manager, '_confirm', return_value=True):
+
+            manager.copy_message()
+
+            # Verify local copy was called on client
+            manager.api_src.getClient().copy.assert_called_once_with("1,2", "LocalFolder")
+            # Verify remote copy was NOT called
+            manager.api_src.copyMailsRemote.assert_not_called()
+
+    def test_copy_message_remote(self, manager_with_mocks):
+        """Test copying messages to a remote account."""
+        manager = manager_with_mocks
+
+        with patch.object(manager, 'select_message', return_value="msg_1"), \
+             patch.object(manager.api_src, 'selectFolderN', return_value="user@server/RemoteFolder"), \
+             patch.object(manager, '_confirm', return_value=True):
+
+            manager.copy_message()
+
+            # Verify remote copy was called with extracted account and folder
+            manager.api_src.copyMailsRemote.assert_called_once_with(
+                manager.api_src.getClient(), "1,2", "user@server", folder="RemoteFolder"
+            )
+            # Verify local copy was NOT called
+            manager.api_src.getClient().copy.assert_not_called()
+
+    def test_copy_message_cancelled(self, manager_with_mocks):
+        """Test user cancelling copy operation."""
+        manager = manager_with_mocks
+
+        with patch.object(manager, 'select_message', return_value="msg_1"), \
+             patch.object(manager.api_src, 'selectFolderN', return_value="LocalFolder"), \
+             patch.object(manager, '_confirm', return_value=False):
+
+            manager.copy_message()
+
+            # Verify no copies were performed
+            manager.api_src.getClient().copy.assert_not_called()
+            manager.api_src.copyMailsRemote.assert_not_called()
 
 
 class TestSearchConstruction:
