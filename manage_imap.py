@@ -624,7 +624,8 @@ class EmailManager:
 
         msg_list_str = msg_ids[0].decode("utf-8").replace(" ", ",")
         msg_count = len(msg_list_str.split(","))
-        self._print_status(f"Found {msg_count} messages matching the rule.")
+        self._print_status(f"Found {msg_count} messages matching the rule."
+                           f" We are moving them to {folder}")
 
         if interactive and not self._confirm("Proceed with moving messages"):
             self._print_status("Move operation cancelled.")
