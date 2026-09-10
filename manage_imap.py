@@ -59,6 +59,7 @@ class RulesMenu(IntEnum):
 
 # Local imports
 from socialModules.configMod import DATADIR
+from socialModules.moduleContent import display_posts
 from socialModules.moduleFilterManager import moduleFilterManager, EmailFilterRule
 
 
@@ -261,15 +262,6 @@ class EmailManager:
                 self._print_status("Returning to main menu...")
                 break
 
-
-    def _display_recent_messages(self, posts: List[Any]) -> None:
-        """Display recent messages to the user."""
-        self._print_status("\nRecent messages:")
-        for i, msg in enumerate(posts[-RECENT_MESSAGES_LIMIT:]):
-            from_addr = self.api_src.getPostFrom(msg)
-            subject = self.api_src.getPostTitle(msg)
-            print(f"{i}: {from_addr} - {subject}")
-
     def _get_message_choice(self, posts: List[Any]) -> Optional[Any]:
         """Get message selection from user."""
         recent_posts = posts[-RECENT_MESSAGES_LIMIT:]
@@ -306,7 +298,17 @@ class EmailManager:
                     f"No messages found in current folder: {self.api_src.getChannel()}"
                 )
             else:
-                self._display_recent_messages(posts)
+                display_posts(
+                    self.api_src,
+                    posts,
+                    format_post=lambda msg: (
+                        f"{self.api_src.getPostFrom(msg)} - "
+                        f"{self.api_src.getPostTitle(msg)}"
+                    ),
+                    limit=RECENT_MESSAGES_LIMIT,
+                    separator=": ",
+                    title="\nRecent messages:",
+                )
                 selected_msg = self._get_message_choice(posts)
 
         except Exception as e:
@@ -559,7 +561,7 @@ class EmailManager:
         # Mapping of common header-like keywords to standard IMAP search keys
         # RFC 3501 Section 6.4.4
         standard_keys = {"FROM", "TO", "SUBJECT", "CC", "BCC", "BODY", "TEXT"}
-        
+
         if keyword_upper in standard_keys:
             return [keyword_upper, safe_pattern]
 
@@ -598,7 +600,7 @@ class EmailManager:
 
         try:
             self.api_src.setPosts()
-            # Pass tokens as separate arguments. imaplib will handle quoting if necessary 
+            # Pass tokens as separate arguments. imaplib will handle quoting if necessary
             # or we can pass the fully formatted string. Most IMAP clients join with spaces.
             status, msg_ids = self.api_src.getClient().search(None, *search_tokens)
             if status != "OK":
